@@ -33,10 +33,11 @@ android {
 
     // Optional release signing: provide DSH_KEYSTORE / DSH_KEYSTORE_PASSWORD /
     // DSH_KEY_ALIAS / DSH_KEY_PASSWORD (env vars, e.g. from GitHub secrets).
-    // Without them assembleRelease produces an unsigned APK.
+    // Signing activates only when the keystore file actually exists, so a
+    // missing keystore silently falls back to an unsigned release APK.
     signingConfigs {
         val keystore = System.getenv("DSH_KEYSTORE")
-        if (!keystore.isNullOrBlank()) {
+        if (!keystore.isNullOrBlank() && file(keystore).exists()) {
             create("release") {
                 storeFile = file(keystore)
                 storePassword = System.getenv("DSH_KEYSTORE_PASSWORD")
