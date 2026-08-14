@@ -51,6 +51,10 @@
     <string name="connect_disconnect">قطع الاتصال</string>
     <string name="chatlist_title">المحادثات</string>
     <string name="chatlist_new_session">جلسة جديدة</string>
+    <string name="chatlist_new_session_in">جلسة جديدة في…</string>
+    <string name="chatlist_home_directory">المجلد الرئيسي</string>
+    <string name="chatlist_filter_all">الكل</string>
+    <string name="chatlist_no_workspaces">لا توجد مساحات عمل بعد — أنشئ واحدة بالأسفل.</string>
     <string name="chatlist_search_hint">البحث في الجلسات</string>
     <string name="chatlist_empty">لا توجد جلسات بعد</string>
     <string name="chatlist_empty_hint">ابدأ جلسة جديدة من Harness أو من هنا.</string>

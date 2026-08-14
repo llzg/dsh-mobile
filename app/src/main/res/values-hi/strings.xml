@@ -51,6 +51,10 @@
     <string name="connect_disconnect">डिस्कनेक्ट करें</string>
     <string name="chatlist_title">चैट</string>
     <string name="chatlist_new_session">नया सेशन</string>
+    <string name="chatlist_new_session_in">नए सेशन के लिए…</string>
+    <string name="chatlist_home_directory">होम डायरेक्टरी</string>
+    <string name="chatlist_filter_all">सभी</string>
+    <string name="chatlist_no_workspaces">अभी कोई कार्यक्षेत्र नहीं — नीचे बनाएं।</string>
     <string name="chatlist_search_hint">सेशन खोजें</string>
     <string name="chatlist_empty">अभी कोई सेशन नहीं</string>
     <string name="chatlist_empty_hint">Harness से या यहीं से नया सेशन शुरू करें।</string>

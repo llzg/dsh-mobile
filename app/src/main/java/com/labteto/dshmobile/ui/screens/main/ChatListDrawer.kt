@@ -5,6 +5,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -99,9 +101,12 @@ fun ChatListDrawer(
     val workspaces by store.workspaces.collectAsStateWithLifecycle()
     val archivedIds by store.archivedSessionIds.collectAsStateWithLifecycle()
     val searchResults by store.searchResults.collectAsStateWithLifecycle()
+    val hostInfo by store.hostInfo.collectAsStateWithLifecycle()
 
     var query by remember { mutableStateOf("") }
     var newWorkspaceOpen by remember { mutableStateOf(false) }
+    var newSessionOpen by remember { mutableStateOf(false) }
+    var workspaceFilter by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(query) {
         delay(250)
@@ -134,12 +139,7 @@ fun ChatListDrawer(
 
         DsButton(
             text = stringResource(R.string.chatlist_new_session),
-            onClick = {
-                scope.launch {
-                    store.createSession()
-                    onClose()
-                }
-            },
+            onClick = { newSessionOpen = true },
             variant = DsButtonVariant.Info,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -157,11 +157,52 @@ fun ChatListDrawer(
             colors = drawerTextFieldColors(),
         )
 
+        if (workspaces.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DsPill(
+                    text = stringResource(R.string.chatlist_filter_all),
+                    selected = workspaceFilter == null,
+                    onClick = { workspaceFilter = null },
+                )
+                workspaces.forEach { workspace ->
+                    DsPill(
+                        text = workspace.title.ifBlank { workspace.path.substringAfterLast('\\') },
+                        selected = workspaceFilter == workspace.workspaceId,
+                        onClick = { workspaceFilter = workspace.workspaceId },
+                    )
+                }
+            }
+        }
+
         Spacer(Modifier.height(8.dp))
 
         val activeSessions = sessions.filter { it.sessionId !in archivedIds }
+        val sessionsById = activeSessions.associateBy { it.sessionId }
         val workspaceSessionIds = workspaces.flatMap { it.sessionIds }.toSet()
         val archivedSessions = sessions.filter { it.sessionId in archivedIds }
+
+        // Which workspace directly registers each session id.
+        val workspaceOfSessionId = workspaces
+            .flatMap { ws -> ws.sessionIds.map { it to ws.workspaceId } }
+            .toMap()
+
+        // Subagent sessions grouped under the workspace of their root parent session.
+        val subagentsByWorkspace: Map<String, List<SessionRow>> = activeSessions
+            .filter { it.origin == "subagent" && it.parentSessionId != null }
+            .mapNotNull { child ->
+                workspaceOf(child, sessionsById, workspaceOfSessionId)?.let { it to child }
+            }
+            .groupBy({ it.first }, { it.second })
+        val groupedSubagentIds = subagentsByWorkspace.values.flatten().mapTo(HashSet()) { it.sessionId }
+
+        val visibleWorkspaces =
+            if (workspaceFilter == null) workspaces else workspaces.filter { it.workspaceId == workspaceFilter }
 
         LazyColumn(modifier = Modifier.weight(1f)) {
             if (query.isNotBlank() && searchResults.isNotEmpty()) {
@@ -178,45 +219,62 @@ fun ChatListDrawer(
                     )
                 }
             } else {
-                for (workspace in workspaces) {
+                var sectionShown = false
+                for (workspace in visibleWorkspaces) {
                     val rows = workspace.sessionIds.mapNotNull { id ->
                         activeSessions.firstOrNull { it.sessionId == id }
                     }
-                    if (rows.isEmpty()) continue
+                    val subagents = subagentsByWorkspace[workspace.workspaceId].orEmpty()
+                    if (rows.isEmpty() && subagents.isEmpty()) continue
+                    sectionShown = true
                     item(key = "workspace-${workspace.workspaceId}") {
                         SectionHeader(workspace.title.ifBlank { workspace.path.substringAfterLast('\\') })
                     }
                     items(rows, key = { it.sessionId }) { session ->
                         SessionRowItem(session, store, scope, onClose)
                     }
-                }
-
-                val ungrouped = activeSessions.filter { it.sessionId !in workspaceSessionIds }
-                if (ungrouped.isNotEmpty()) {
-                    item(key = "sessions-header") {
-                        SectionHeader(stringResource(R.string.chatlist_sessions))
-                    }
-                    items(ungrouped, key = { it.sessionId }) { session ->
-                        SessionRowItem(session, store, scope, onClose)
+                    if (subagents.isNotEmpty()) {
+                        item(key = "subagents-${workspace.workspaceId}") {
+                            SectionHeader(stringResource(R.string.chatlist_subagents))
+                        }
+                        items(subagents, key = { it.sessionId }) { session ->
+                            SessionRowItem(session, store, scope, onClose)
+                        }
                     }
                 }
 
-                if (archivedSessions.isNotEmpty()) {
-                    item(key = "archived") {
-                        var archivedExpanded by remember { mutableStateOf(false) }
-                        DisclosureRow(
-                            title = stringResource(R.string.chatlist_archived),
-                            expanded = archivedExpanded,
-                            onToggle = { archivedExpanded = !archivedExpanded },
-                        ) {
-                            archivedSessions.forEach { session ->
-                                SessionRowItem(session, store, scope, onClose)
+                if (workspaceFilter == null) {
+                    val ungrouped = activeSessions.filter {
+                        it.sessionId !in workspaceSessionIds && it.sessionId !in groupedSubagentIds
+                    }
+                    if (ungrouped.isNotEmpty()) {
+                        sectionShown = true
+                        item(key = "sessions-header") {
+                            SectionHeader(stringResource(R.string.chatlist_sessions))
+                        }
+                        items(ungrouped, key = { it.sessionId }) { session ->
+                            SessionRowItem(session, store, scope, onClose)
+                        }
+                    }
+
+                    if (archivedSessions.isNotEmpty()) {
+                        sectionShown = true
+                        item(key = "archived") {
+                            var archivedExpanded by remember { mutableStateOf(false) }
+                            DisclosureRow(
+                                title = stringResource(R.string.chatlist_archived),
+                                expanded = archivedExpanded,
+                                onToggle = { archivedExpanded = !archivedExpanded },
+                            ) {
+                                archivedSessions.forEach { session ->
+                                    SessionRowItem(session, store, scope, onClose)
+                                }
                             }
                         }
                     }
                 }
 
-                if (sessions.isEmpty()) {
+                if (!sectionShown) {
                     item(key = "empty") {
                         EmptyHero(
                             headline = stringResource(R.string.chatlist_empty),
@@ -236,6 +294,43 @@ fun ChatListDrawer(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SectionHeader(stringResource(R.string.chatlist_new_workspace))
+        }
+    }
+
+    if (newSessionOpen) {
+        DsDialog(
+            title = stringResource(R.string.chatlist_new_session_in),
+            onDismiss = { newSessionOpen = false },
+        ) {
+            if (workspaces.isEmpty()) {
+                Text(
+                    stringResource(R.string.chatlist_no_workspaces),
+                    style = DsType.std14,
+                    color = colors.labelSecondary,
+                )
+            }
+            workspaces.forEach { workspace ->
+                WorkspaceChoiceRow(
+                    title = workspace.title.ifBlank { workspace.path.substringAfterLast('\\') },
+                    subtitle = workspace.path,
+                ) {
+                    newSessionOpen = false
+                    scope.launch {
+                        store.createSession(workspaceId = workspace.workspaceId)
+                        onClose()
+                    }
+                }
+            }
+            WorkspaceChoiceRow(
+                title = stringResource(R.string.chatlist_home_directory),
+                subtitle = hostInfo?.cwd,
+            ) {
+                newSessionOpen = false
+                scope.launch {
+                    store.createSession()
+                    onClose()
+                }
+            }
         }
     }
 
@@ -278,6 +373,60 @@ fun ChatListDrawer(
             }
         }
     }
+}
+
+/** One selectable workspace row inside the new-session picker. */
+@Composable
+private fun WorkspaceChoiceRow(
+    title: String,
+    subtitle: String?,
+    onClick: () -> Unit,
+) {
+    val colors = DsTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = DsType.std14,
+                color = colors.labelPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    subtitle,
+                    style = DsType.caption11,
+                    color = colors.labelTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Walks a (possibly nested) subagent session's parent chain up to the session directly
+ * registered in a workspace, returning that workspace id — or null for an orphan.
+ */
+private fun workspaceOf(
+    session: SessionRow,
+    sessionsById: Map<String, SessionRow>,
+    workspaceOfSessionId: Map<String, String>,
+): String? {
+    val visited = HashSet<String>()
+    var current: SessionRow? = session
+    while (current != null && visited.add(current.sessionId)) {
+        workspaceOfSessionId[current.sessionId]?.let { return it }
+        current = current.parentSessionId?.let { sessionsById[it] }
+    }
+    return null
 }
 
 /** One session row: status dot, title, caption, optional subagent pill, long-press menu. */

@@ -1,8 +1,11 @@
 package com.labteto.dshmobile.ui.screens.main
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,21 +17,26 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -44,9 +52,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -99,6 +109,7 @@ import com.labteto.dshmobile.ui.components.DsButton
 import com.labteto.dshmobile.ui.components.DsButtonSize
 import com.labteto.dshmobile.ui.components.DsButtonVariant
 import com.labteto.dshmobile.ui.components.DsDialog
+import com.labteto.dshmobile.ui.components.DsIconButton
 import com.labteto.dshmobile.ui.components.DsMenu
 import com.labteto.dshmobile.ui.components.DsPill
 import com.labteto.dshmobile.ui.components.EmptyHero
@@ -123,6 +134,7 @@ import com.labteto.dshmobile.ui.components.UserBubble
 import com.labteto.dshmobile.ui.components.WebCardKind
 import com.labteto.dshmobile.ui.components.WebSource
 import com.labteto.dshmobile.ui.theme.DsShapes
+import com.labteto.dshmobile.ui.theme.DsSpacing
 import com.labteto.dshmobile.ui.theme.DsTheme
 import com.labteto.dshmobile.ui.theme.DsType
 import dagger.hilt.EntryPoint
@@ -939,15 +951,18 @@ private fun ComposerSurface(
     onStop: () -> Unit,
 ) {
     val colors = DsTheme.colors
+    var showCommandsMenu by remember { mutableStateOf(false) }
+    var permission by remember { mutableStateOf("read_only") }
+    
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = DsSpacing.medium, vertical = DsSpacing.small),
         shape = DsShapes.composer,
         color = colors.composerCard,
         border = BorderStroke(1.dp, colors.borderL1),
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(DsSpacing.medium), verticalArrangement = Arrangement.spacedBy(DsSpacing.small)) {
             TextField(
                 value = draft,
                 onValueChange = onDraftChange,
@@ -955,6 +970,7 @@ private fun ComposerSurface(
                 placeholder = { Text(stringResource(R.string.chat_composer_hint), style = DsType.std14, color = colors.labelTertiary) },
                 minLines = 1,
                 maxLines = 8,
+                textStyle = DsType.std14,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
@@ -962,53 +978,238 @@ private fun ComposerSurface(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     cursorColor = colors.accent,
+                    focusedTextColor = colors.labelPrimary,
+                    unfocusedTextColor = colors.labelPrimary,
                 ),
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                DsPill(
-                    text = stringResource(R.string.chat_composer_queue),
-                    selected = mode == "queue",
-                    onClick = { onModeChange("queue") },
-                )
-                Spacer(Modifier.width(6.dp))
-                DsPill(
-                    text = stringResource(R.string.chat_composer_steer),
-                    selected = mode == "steer",
-                    onClick = { onModeChange("steer") },
-                )
-                Spacer(Modifier.width(6.dp))
-                models?.current?.let {
-                    DsPill(
-                        text = "${it.provider} · ${it.model}",
-                        onClick = onOpenModels,
-                    )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(DsSpacing.compact)
+            ) {
+                // Left: Commands button (28dp circle, hover fill)
+                Surface(
+                    onClick = { showCommandsMenu = true },
+                    modifier = Modifier.size(28.dp),
+                    shape = CircleShape,
+                    color = colors.hoverSolid,
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Commands",
+                            tint = colors.labelPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
+                
+                // Permission selector with menu
+                DsMenu(
+                    anchor = {
+                        Row(
+                            modifier = Modifier
+                                .clip(DsShapes.cube)
+                                .clickable { }
+                                .background(Color.Transparent)
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = when (permission) {
+                                    "read_only" -> "Read Only"
+                                    "workspace_write" -> "Workspace Write"
+                                    "full_access" -> "Full Access"
+                                    else -> "Read Only"
+                                },
+                                style = DsType.small13,
+                                color = colors.labelSecondary,
+                                maxLines = 1,
+                            )
+                            Icon(
+                                Icons.Filled.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = colors.labelTertiary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    },
+                    items = listOf(
+                        MenuItem("Read Only") { permission = "read_only" },
+                        MenuItem("Workspace Write") { permission = "workspace_write" },
+                        MenuItem("Full Access") { permission = "full_access" },
+                    ),
+                )
+                
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onAttach) {
-                    Icon(
-                        Icons.Filled.AttachFile,
-                        contentDescription = stringResource(R.string.chat_composer_attach),
-                        tint = colors.labelTertiary,
-                    )
+                
+                // Model + Effort selector (max 220dp to prevent overflow)
+                models?.current?.let {
+                    Surface(
+                        onClick = onOpenModels,
+                        modifier = Modifier.widthIn(max = 220.dp),
+                        shape = DsShapes.cube,
+                        color = Color.Transparent,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                "${it.provider} · ${it.model}",
+                                style = DsType.small13,
+                                color = colors.labelSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Icon(
+                                Icons.Filled.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = colors.labelTertiary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
                 }
+                
+                // Send/Stop button (34dp circle, info-fill)
                 if (running) {
-                    DsButton(
-                        text = stringResource(R.string.chat_composer_stop),
+                    Surface(
                         onClick = onStop,
-                        variant = DsButtonVariant.Danger,
-                        size = DsButtonSize.Small,
-                    )
+                        modifier = Modifier.size(34.dp),
+                        shape = CircleShape,
+                        color = colors.error,
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(Color.White)
+                            )
+                        }
+                    }
                 } else {
-                    DsButton(
-                        text = "",
-                        icon = Icons.AutoMirrored.Filled.Send,
+                    Surface(
                         onClick = onSend,
-                        variant = DsButtonVariant.Info,
+                        modifier = Modifier.size(34.dp),
+                        shape = CircleShape,
+                        color = if (draft.isNotBlank()) colors.buttonInfoFill else colors.buttonInfoFill.copy(alpha = 0.4f),
                         enabled = draft.isNotBlank(),
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Commands menu dialog
+    if (showCommandsMenu) {
+        CommandsMenuDialog(
+            onDismiss = { showCommandsMenu = false },
+            onCommandSelected = { command ->
+                showCommandsMenu = false
+                onDraftChange("/$command")
+            }
+        )
+    }
+}
+
+@Composable
+private fun CommandsMenuDialog(
+    onDismiss: () -> Unit,
+    onCommandSelected: (String) -> Unit,
+) {
+    val colors = DsTheme.colors
+    
+    data class Command(
+        val name: String,
+        val description: String,
+    )
+    
+    val commands = listOf(
+        Command("goal", "Set or view the goal for a long-running task"),
+        Command("plan", "Enter or leave plan mode"),
+        Command("feedback", "Record feedback about this session"),
+        Command("compact", "Compact older conversation history"),
+        Command("permission", "Switch the permission preset"),
+        Command("export", "Download session log"),
+    )
+    
+    DsDialog(
+        title = "Commands",
+        onDismiss = onDismiss
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            commands.forEach { command ->
+                Surface(
+                    onClick = { onCommandSelected(command.name) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.Transparent,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = DsSpacing.comfortable,
+                                vertical = DsSpacing.medium
+                            )
+                    ) {
+                        Text(
+                            text = "/${command.name}",
+                            style = DsType.std14.copy(fontWeight = FontWeight.Medium),
+                            color = colors.labelPrimary
+                        )
+                        Spacer(modifier = Modifier.height(DsSpacing.tiny))
+                        Text(
+                            text = command.description,
+                            style = DsType.xsmall12,
+                            color = colors.labelSecondary
+                        )
+                    }
+                }
+                if (command != commands.last()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .padding(horizontal = DsSpacing.comfortable)
+                            .background(colors.borderL2)
                     )
                 }
             }
         }
+        
+        Spacer(modifier = Modifier.height(DsSpacing.comfortable))
+        
+        DsButton(
+            text = "Cancel",
+            onClick = onDismiss,
+            variant = DsButtonVariant.Ghost,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -1336,7 +1537,7 @@ private fun mapToolView(view: ToolView, running: Boolean = false): ToolCardView 
         total = view.total,
     )
     is ReadView -> ToolCardView.ReadCard(
-        label = view.label,
+        label = view.title ?: view.path,
         path = view.path,
         lines = view.lines.map { ReadLine(it.number, it.text) },
         totalLines = view.totalLines,

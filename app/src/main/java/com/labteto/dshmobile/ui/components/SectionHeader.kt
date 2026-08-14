@@ -32,7 +32,7 @@ fun SectionHeader(
         if (action != null) {
             Text(
                 action,
-                style = DsType.caption11Strong.copy(color = colors.accent),
+                style = DsType.caption11Strong,
                 color = colors.accent,
                 modifier = if (onAction != null) {
                     Modifier.clickable(onClick = onAction).padding(4.dp)

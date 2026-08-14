@@ -51,6 +51,10 @@
     <string name="connect_disconnect">ตัดการเชื่อมต่อ</string>
     <string name="chatlist_title">แชท</string>
     <string name="chatlist_new_session">เซสชันใหม่</string>
+    <string name="chatlist_new_session_in">เซสชันใหม่ใน…</string>
+    <string name="chatlist_home_directory">โฮมไดเรกทอรี</string>
+    <string name="chatlist_filter_all">ทั้งหมด</string>
+    <string name="chatlist_no_workspaces">ยังไม่มีเวิร์กสเปซ — สร้างด้านล่าง</string>
     <string name="chatlist_search_hint">ค้นหาเซสชัน</string>
     <string name="chatlist_empty">ยังไม่มีเซสชัน</string>
     <string name="chatlist_empty_hint">เริ่มเซสชันใหม่จาก Harness หรือจากที่นี่</string>

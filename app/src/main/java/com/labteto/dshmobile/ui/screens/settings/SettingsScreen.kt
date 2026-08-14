@@ -2,6 +2,7 @@ package com.labteto.dshmobile.ui.screens.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +25,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -32,16 +36,25 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.labteto.dshmobile.R
 import com.labteto.dshmobile.connection.AppSettings
+import com.labteto.dshmobile.connection.ConnectionPhase
 import com.labteto.dshmobile.core.DshCore
+import com.labteto.dshmobile.ui.components.DsButton
+import com.labteto.dshmobile.ui.components.DsButtonVariant
+import com.labteto.dshmobile.ui.components.DsDialog
 import com.labteto.dshmobile.ui.components.SectionHeader
+import com.labteto.dshmobile.ui.components.StateDot
+import com.labteto.dshmobile.ui.components.StateDotState
+import com.labteto.dshmobile.ui.theme.DsShapes
+import com.labteto.dshmobile.ui.theme.DsSpacing
 import com.labteto.dshmobile.ui.theme.DsTheme
 import com.labteto.dshmobile.ui.theme.DsType
-import com.labteto.dshmobile.ui.theme.DsShapes
 
 @Composable
 fun SettingsScreen(onClose: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.state.collectAsStateWithLifecycle()
+    val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
     val colors = DsTheme.colors
+    var showDisconnectDialog by remember { mutableStateOf(false) }
     BackHandler(onBack = onClose)
 
     Surface(modifier = Modifier.fillMaxSize(), color = colors.bgBase) {
@@ -63,6 +76,11 @@ fun SettingsScreen(onClose: () -> Unit, viewModel: SettingsViewModel = hiltViewM
             Spacer(Modifier.height(4.dp))
             LanguageRow(settings) { tag -> viewModel.set { it.copy(localeOverride = tag) } }
             AppearanceRow(settings) { mode -> viewModel.set { it.copy(themePreference = mode) } }
+
+            Spacer(Modifier.height(16.dp))
+            SectionHeader(stringResource(R.string.settings_connection))
+            Spacer(Modifier.height(4.dp))
+            ConnectionSection(connectionState, onDisconnect = { showDisconnectDialog = true })
 
             Spacer(Modifier.height(16.dp))
             SectionHeader(stringResource(R.string.settings_notifications))
@@ -94,6 +112,114 @@ fun SettingsScreen(onClose: () -> Unit, viewModel: SettingsViewModel = hiltViewM
                 modifier = Modifier.padding(vertical = 4.dp),
             )
             Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (showDisconnectDialog) {
+        DsDialog(
+            title = stringResource(R.string.settings_connection_disconnect_confirm),
+            onDismiss = { showDisconnectDialog = false }
+        ) {
+            Text(
+                stringResource(R.string.settings_connection_disconnect_message),
+                style = DsType.std14,
+                color = colors.labelSecondary,
+                modifier = Modifier.padding(bottom = DsSpacing.medium)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(DsSpacing.small)) {
+                DsButton(
+                    text = stringResource(R.string.settings_connection_disconnect),
+                    onClick = {
+                        viewModel.disconnect()
+                        showDisconnectDialog = false
+                        onClose()
+                    },
+                    variant = DsButtonVariant.Danger,
+                )
+                DsButton(
+                    text = stringResource(R.string.common_cancel),
+                    onClick = { showDisconnectDialog = false },
+                    variant = DsButtonVariant.Ghost,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConnectionSection(
+    connectionState: com.labteto.dshmobile.connection.ConnectionUiState,
+    onDisconnect: () -> Unit
+) {
+    val colors = DsTheme.colors
+    val isConnected = connectionState.phase == ConnectionPhase.CONNECTED || 
+                     connectionState.phase == ConnectionPhase.RECONNECTING
+
+    Column(modifier = Modifier.padding(vertical = DsSpacing.compact)) {
+        // Status row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.settings_connection_status),
+                style = DsType.std14,
+                color = colors.labelSecondary,
+                modifier = Modifier.weight(1f)
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StateDot(
+                    when (connectionState.phase) {
+                        ConnectionPhase.CONNECTED -> StateDotState.Done
+                        ConnectionPhase.RECONNECTING -> StateDotState.Running
+                        ConnectionPhase.CONNECTING -> StateDotState.Running
+                        else -> StateDotState.Idle
+                    }
+                )
+                Spacer(Modifier.width(DsSpacing.small))
+                Text(
+                    when (connectionState.phase) {
+                        ConnectionPhase.CONNECTED -> stringResource(R.string.common_connected)
+                        ConnectionPhase.RECONNECTING -> stringResource(R.string.common_reconnecting)
+                        ConnectionPhase.CONNECTING -> stringResource(R.string.common_loading)
+                        else -> stringResource(R.string.common_offline)
+                    },
+                    style = DsType.small13,
+                    color = colors.labelTertiary
+                )
+            }
+        }
+
+        // Host info row
+        if (isConnected && connectionState.host != null) {
+            Spacer(Modifier.height(DsSpacing.compact))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.settings_connection_host),
+                    style = DsType.std14,
+                    color = colors.labelSecondary,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    connectionState.host.authority,
+                    style = DsType.small13,
+                    color = colors.labelTertiary
+                )
+            }
+        }
+
+        // Disconnect button
+        if (isConnected) {
+            Spacer(Modifier.height(DsSpacing.medium))
+            DsButton(
+                text = stringResource(R.string.settings_connection_disconnect),
+                onClick = onDisconnect,
+                variant = DsButtonVariant.Outline,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

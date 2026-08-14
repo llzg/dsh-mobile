@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.DshMobile" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.DshMobile" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@android:color/transparent</item>
     </style>
     <style name="Theme.DshMobile.Starting" parent="Theme.SplashScreen">

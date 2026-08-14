@@ -136,6 +136,20 @@ fun ConnectScreen(onOpenSettings: () -> Unit, viewModel: ConnectViewModel = hilt
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            if (state.error != null) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = when (state.error) {
+                        "connect_failed" -> stringResource(R.string.connect_failed, host, port)
+                        "connect_failed_fence" -> stringResource(R.string.connect_failed_fence)
+                        else -> stringResource(R.string.common_error)
+                    },
+                    style = DsType.std14,
+                    color = colors.error,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
             Spacer(Modifier.height(20.dp))
 
             SectionHeader(

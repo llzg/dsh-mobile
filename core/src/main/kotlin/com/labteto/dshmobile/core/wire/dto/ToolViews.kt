@@ -7,6 +7,7 @@ import com.labteto.dshmobile.core.wire.encodeToJsonElement
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.buildClassSerialDescriptor
@@ -171,14 +172,20 @@ data class SearchView(
 @Serializable
 data class ReadView(
     @SerialName("card") override val card: String = "read",
-    @SerialName("label") val label: String,
-    @SerialName("path") val path: String? = null,
-    /** The returned window's lines, in file order. */
+    /** Replacement title for the completed call; absent keeps the pending-state title. */
+    @SerialName("title") val title: String? = null,
+    /** The read file's path. */
+    @SerialName("path") val path: String,
+    /** 1-based first line of the requested window, kept even when `lines` is empty. */
+    @SerialName("offset") val offset: Int,
+    /** The returned window's lines, in file order, each keeping its file line number. */
     @SerialName("lines") val lines: List<ReadFileLine> = emptyList(),
     /** Exact total line count in the file. */
     @SerialName("totalLines") val totalLines: Int,
     /** A syntax-highlighting language hint derived from the file extension. */
     @SerialName("lang") val lang: String? = null,
+    /** Model-facing result content, for UIs without read-card capability. */
+    @SerialName("content") val content: List<ContentBlock>? = null,
 ) : ToolView()
 
 /** A completed web retrieval card; `kind` splits search ('search') from fetch ('fetch'). */
@@ -229,14 +236,20 @@ object ToolViewSerializer : KSerializer<ToolView> {
     override fun deserialize(decoder: Decoder): ToolView {
         val json = (decoder as JsonDecoder).decodeJsonElement().jsonObject
         val card = json["card"]?.jsonPrimitive?.contentOrNull ?: "generic"
-        return when (card) {
-            "generic" -> decodeFromJsonElement(GenericView.serializer(), json)
-            "terminal" -> decodeFromJsonElement(TerminalView.serializer(), json)
-            "diff" -> decodeFromJsonElement(DiffView.serializer(), json)
-            "search" -> decodeFromJsonElement(SearchView.serializer(), json)
-            "read" -> decodeFromJsonElement(ReadView.serializer(), json)
-            "web" -> decodeFromJsonElement(WebView.serializer(), json)
-            else -> UnknownView(card, json)
+        return try {
+            when (card) {
+                "generic" -> decodeFromJsonElement(GenericView.serializer(), json)
+                "terminal" -> decodeFromJsonElement(TerminalView.serializer(), json)
+                "diff" -> decodeFromJsonElement(DiffView.serializer(), json)
+                "search" -> decodeFromJsonElement(SearchView.serializer(), json)
+                "read" -> decodeFromJsonElement(ReadView.serializer(), json)
+                "web" -> decodeFromJsonElement(WebView.serializer(), json)
+                else -> UnknownView(card, json)
+            }
+        } catch (e: SerializationException) {
+            // Tool views are host-computed and merge-extensible; a drift in one card
+            // must degrade to the raw passthrough, never fail the whole response.
+            UnknownView(card, json)
         }
     }
 }

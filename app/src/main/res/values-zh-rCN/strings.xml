@@ -51,6 +51,10 @@
     <string name="connect_disconnect">断开连接</string>
     <string name="chatlist_title">会话</string>
     <string name="chatlist_new_session">新建会话</string>
+    <string name="chatlist_new_session_in">新建会话到…</string>
+    <string name="chatlist_home_directory">主目录</string>
+    <string name="chatlist_filter_all">全部</string>
+    <string name="chatlist_no_workspaces">还没有工作区——请在下方创建。</string>
     <string name="chatlist_search_hint">搜索会话</string>
     <string name="chatlist_empty">暂无会话</string>
     <string name="chatlist_empty_hint">可以从 Harness 或在这里开始新会话。</string>

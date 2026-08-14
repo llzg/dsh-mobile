@@ -51,6 +51,10 @@
     <string name="connect_disconnect">Se déconnecter</string>
     <string name="chatlist_title">Discussions</string>
     <string name="chatlist_new_session">Nouvelle session</string>
+    <string name="chatlist_new_session_in">Nouvelle session dans…</string>
+    <string name="chatlist_home_directory">Dossier personnel</string>
+    <string name="chatlist_filter_all">Tout</string>
+    <string name="chatlist_no_workspaces">Aucun espace de travail pour l\'instant — créez-en un ci-dessous.</string>
     <string name="chatlist_search_hint">Rechercher des sessions</string>
     <string name="chatlist_empty">Aucune session pour le moment</string>
     <string name="chatlist_empty_hint">Démarrez une nouvelle session depuis le Harness ou d’ici.</string>

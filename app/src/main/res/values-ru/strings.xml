@@ -51,6 +51,10 @@
     <string name="connect_disconnect">Отключиться</string>
     <string name="chatlist_title">Чаты</string>
     <string name="chatlist_new_session">Новый сеанс</string>
+    <string name="chatlist_new_session_in">Новая сессия в…</string>
+    <string name="chatlist_home_directory">Домашний каталог</string>
+    <string name="chatlist_filter_all">Все</string>
+    <string name="chatlist_no_workspaces">Рабочих пространств пока нет — создайте одно ниже.</string>
     <string name="chatlist_search_hint">Поиск сеансов</string>
     <string name="chatlist_empty">Сеансов пока нет</string>
     <string name="chatlist_empty_hint">Начните новый сеанс из Harness или отсюда.</string>

@@ -881,7 +881,15 @@ class SessionStore @Inject constructor(
 
     suspend fun search(query: String) {
         val api = apiOrNull() ?: return
-        when (val r = api.sessionSearch(query)) {
+        val trimmed = query.trim()
+        // The host schema is query.trim().min(1).max(500); a blank or overlong query is an
+        // invalid payload, so never send one — a blank query just clears the result set.
+        if (trimmed.isEmpty()) {
+            _searchResults.value = emptyList()
+            return
+        }
+        val bounded = trimmed.take(SESSION_SEARCH_QUERY_MAX_CHARS)
+        when (val r = api.sessionSearch(bounded)) {
             is RpcResult.Ok -> _searchResults.value = r.value.items.map { it.sessionId to it.snippet }
             is RpcResult.Err -> setConnectionError(r.error.message)
         }
@@ -1094,5 +1102,8 @@ class SessionStore @Inject constructor(
     private companion object {
         const val TAG = "SessionStore"
         const val HISTORY_PAGE_SIZE = 60
+
+        /** Host-side wire bound for `session.search` (SESSION_SEARCH_QUERY_MAX_CHARS). */
+        const val SESSION_SEARCH_QUERY_MAX_CHARS = 500
     }
 }

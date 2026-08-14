@@ -1,8 +1,10 @@
 package com.labteto.dshmobile.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,10 +25,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.labteto.dshmobile.ui.theme.DsAnimations
 import com.labteto.dshmobile.ui.theme.DsShapes
 import com.labteto.dshmobile.ui.theme.DsTheme
 import com.labteto.dshmobile.ui.theme.DsType
@@ -52,6 +56,15 @@ fun DsButton(
     val colors = DsTheme.colors
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
+    val pressed by interaction.collectIsPressedAsState()
+    
+    // Animate scale on press for tactile feedback
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) DsAnimations.Scale.pressed else DsAnimations.Scale.normal,
+        animationSpec = DsAnimations.pressScale,
+        label = "buttonScale"
+    )
+    
     val (fill, content) = when (variant) {
         DsButtonVariant.Primary -> colors.brandPrimary to colors.onBrandPrimary
         DsButtonVariant.Info -> colors.buttonInfoFill to colors.onAccent
@@ -60,7 +73,10 @@ fun DsButton(
         DsButtonVariant.Danger -> colors.error to Color.White
     }
     val background = when {
-        !enabled -> fill.copy(alpha = 0.4f)
+        !enabled -> when (variant) {
+            DsButtonVariant.Ghost, DsButtonVariant.Outline -> colors.bgLayer2
+            else -> fill.copy(alpha = 0.4f)
+        }
         hovered -> when (variant) {
             DsButtonVariant.Primary -> colors.buttonPrimaryHover
             DsButtonVariant.Info -> colors.buttonInfoHover
@@ -69,11 +85,16 @@ fun DsButton(
         }
         else -> fill
     }
-    val contentColor = if (enabled) content else content.copy(alpha = 0.4f)
+    val contentColor = if (enabled) content else content.copy(alpha = 0.5f)
     val normal = size == DsButtonSize.Normal
     Surface(
         onClick = onClick,
-        modifier = modifier.height(if (normal) 36.dp else 28.dp),
+        modifier = modifier
+            .height(if (normal) 36.dp else 28.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
         enabled = enabled,
         shape = if (normal) DsShapes.buttonCapsule else DsShapes.buttonSmall,
         color = background,
@@ -93,14 +114,16 @@ fun DsButton(
                     modifier = Modifier.size(if (normal) 16.dp else 14.dp),
                     tint = contentColor,
                 )
-                Spacer(Modifier.width(6.dp))
+                if (text.isNotEmpty()) Spacer(Modifier.width(6.dp))
             }
-            Text(
-                text,
-                style = if (normal) DsType.std14Strong else DsType.small13Strong,
-                color = contentColor,
-                maxLines = 1,
-            )
+            if (text.isNotEmpty()) {
+                Text(
+                    text,
+                    style = if (normal) DsType.std14Strong else DsType.small13Strong,
+                    color = contentColor,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
