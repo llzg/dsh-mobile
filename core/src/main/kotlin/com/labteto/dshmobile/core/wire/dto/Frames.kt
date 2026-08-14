@@ -130,7 +130,7 @@ sealed class MuxFrame {
 
     @Serializable
     @SerialName("session/event")
-    data class SessionEvent(
+    data class SessionEventFrame(
         @SerialName("type") override val type: String = "session/event",
         @SerialName("sessionId") val sessionId: String,
         @SerialName("event") val event: SessionEvent,
@@ -239,7 +239,7 @@ object MuxFrameSerializer : KSerializer<MuxFrame> {
 
     override fun serialize(encoder: Encoder, value: MuxFrame) {
         val json: JsonElement = when (value) {
-            is MuxFrame.SessionEvent -> encodeToJsonElement(MuxFrame.SessionEvent.serializer(), value)
+            is MuxFrame.SessionEventFrame -> encodeToJsonElement(MuxFrame.SessionEventFrame.serializer(), value)
             is MuxFrame.SessionSubscribed -> encodeToJsonElement(MuxFrame.SessionSubscribed.serializer(), value)
             is MuxFrame.ApprovalRequested -> encodeToJsonElement(MuxFrame.ApprovalRequested.serializer(), value)
             is MuxFrame.ApprovalResolved -> encodeToJsonElement(MuxFrame.ApprovalResolved.serializer(), value)
@@ -257,7 +257,7 @@ object MuxFrameSerializer : KSerializer<MuxFrame> {
     override fun deserialize(decoder: Decoder): MuxFrame {
         val json = (decoder as JsonDecoder).decodeJsonElement().jsonObject
         return when (val type = json["type"]?.jsonPrimitive?.contentOrNull ?: "") {
-            "session/event" -> decodeFromJsonElement(MuxFrame.SessionEvent.serializer(), json)
+            "session/event" -> decodeFromJsonElement(MuxFrame.SessionEventFrame.serializer(), json)
             "session/subscribed" -> decodeFromJsonElement(MuxFrame.SessionSubscribed.serializer(), json)
             "approval/requested" -> decodeFromJsonElement(MuxFrame.ApprovalRequested.serializer(), json)
             "approval/resolved" -> decodeFromJsonElement(MuxFrame.ApprovalResolved.serializer(), json)
