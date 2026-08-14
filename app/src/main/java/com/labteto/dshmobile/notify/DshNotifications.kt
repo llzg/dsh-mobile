@@ -43,7 +43,12 @@ class DshNotifications @Inject constructor(
         Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    /** Post a completion/action notification that deep-links to a session. */
+    /**
+     * Post a completion/action notification that deep-links to a session.
+     * [canPost] gates the POST_NOTIFICATIONS runtime permission (API 33+);
+     * the lint suppression covers that checked gate.
+     */
+    @android.annotation.SuppressLint("MissingPermission")
     fun postSession(
         channel: String,
         id: Int,

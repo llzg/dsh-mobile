@@ -3,11 +3,9 @@ package com.labteto.dshmobile.ui.screens.main
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
@@ -29,16 +27,20 @@ import kotlinx.coroutines.launch
 /**
  * Discord-style shell:
  *  - swipe right from the LEFT edge opens the chat-list drawer
- *  - swipe left on the drawer content closes it (ModalNavigationDrawer default)
+ *    (ModalNavigationDrawer's built-in gesture; swipe left on the drawer
+ *    content closes it, scrim tap and Back also work)
  *  - swipe left from the RIGHT edge opens the session Details panel
- *  - swipe right on the details panel closes it (also Back).
+ *  - swipe right anywhere on the open Details panel closes it
+ *
+ * Horizontal edge drags are axis-orthogonal to the chat list's vertical
+ * scroll, so the two never conflict.
  */
 @Composable
 fun MainScreen(onOpenSettings: () -> Unit, viewModel: MainViewModel = hiltViewModel()) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var detailsOpen by remember { mutableStateOf(false) }
-    val edgeWidth = with(LocalDensity.current) { 28.dp.toPx() }
+    val edgeWidthPx = with(LocalDensity.current) { 28.dp.toPx() }
     val detailsWidth = 300.dp
 
     ModalNavigationDrawer(
@@ -50,7 +52,33 @@ fun MainScreen(onOpenSettings: () -> Unit, viewModel: MainViewModel = hiltViewMo
             )
         },
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(detailsOpen) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { },
+                        onDragEnd = { },
+                        onDragCancel = { },
+                    ) { change, dragAmount ->
+                        val width = size.width.toFloat()
+                        if (!detailsOpen && dragAmount < 0) {
+                            // Right-edge swipe left opens details.
+                            val startX = change.position.x - dragAmount
+                            if (startX >= width - edgeWidthPx && -dragAmount > width * 0.12f) {
+                                detailsOpen = true
+                            }
+                        } else if (detailsOpen && dragAmount > 0) {
+                            // Swipe right across the details area closes it.
+                            val startX = change.position.x - dragAmount
+                            if (startX <= detailsWidth.toPx() * 0.9f && dragAmount > width * 0.12f) {
+                                detailsOpen = false
+                            }
+                        }
+                        change.consume()
+                    }
+                },
+        ) {
             ChatScreen(
                 onOpenDetails = { detailsOpen = true },
                 detailsOpen = detailsOpen,
