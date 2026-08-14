@@ -1,0 +1,174 @@
+package com.labteto.dshmobile.ui.components
+
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import com.labteto.dshmobile.ui.theme.DsColors
+import com.labteto.dshmobile.ui.theme.DsTheme
+import com.labteto.dshmobile.ui.theme.DsType
+import com.labteto.dshmobile.ui.theme.DshTheme
+
+/**
+ * 24dp disclosure row: leading icon (crossfades to a chevron on hover), title, a
+ * 2x2-dot separator, an ellipsized summary, and a content slot revealed when expanded.
+ */
+@Composable
+fun DisclosureRow(
+    title: String,
+    summary: String? = null,
+    icon: ImageVector? = null,
+    running: Boolean = false,
+    expanded: Boolean = false,
+    onToggle: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    content: (@Composable () -> Unit)? = null,
+) {
+    val colors = DsTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 24.dp)
+                .then(
+                    if (onToggle != null) {
+                        Modifier
+                            .hoverable(interaction)
+                            .clickable(
+                                interactionSource = interaction,
+                                indication = LocalIndication.current,
+                                role = Role.Button,
+                                onClick = onToggle,
+                            )
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Crossfade(targetState = hovered, label = "leadingIcon") { isHover ->
+                when {
+                    isHover -> Icon(
+                        if (expanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = colors.labelTertiary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    icon != null -> Icon(icon, contentDescription = null, tint = colors.labelSecondary, modifier = Modifier.size(16.dp))
+                    else -> Spacer(Modifier.size(16.dp))
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            val titleModifier = if (running) Modifier.shimmer(runningBrush(colors)) else Modifier
+            Text(
+                title,
+                style = DsType.std14,
+                color = colors.labelSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false).then(titleModifier),
+            )
+            if (summary != null) {
+                Spacer(Modifier.width(6.dp))
+                TwoByTwoDots(colors.labelDimmed)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    summary,
+                    style = DsType.std14,
+                    color = colors.labelTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        if (expanded) content?.invoke()
+    }
+}
+
+/** Glare band used for the running-state shimmer sweep. */
+private fun runningBrush(colors: DsColors): Brush = Brush.linearGradient(
+    colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.5f), Color.Transparent),
+)
+
+/** Tiny 2x2 dot grid used as a title/summary separator. */
+@Composable
+private fun TwoByTwoDots(color: Color) {
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        repeat(2) {
+            Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                repeat(2) {
+                    Box(Modifier.size(2.dp).clip(CircleShape).background(color))
+                }
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 360)
+@Composable
+private fun DisclosureRowPreview() {
+    DshTheme {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            DisclosureRow(
+                title = "Bash · build",
+                summary = "exit 0",
+                icon = Icons.Filled.Build,
+                running = true,
+                expanded = false,
+                onToggle = {},
+            )
+            DisclosureRow(
+                title = "Search",
+                summary = "12 results",
+                icon = Icons.Filled.Build,
+                running = false,
+                expanded = true,
+                onToggle = {},
+            ) {
+                Text(
+                    "Expanded body",
+                    style = DsType.small13,
+                    color = DsTheme.colors.labelTertiary,
+                    modifier = Modifier.padding(4.dp),
+                )
+            }
+        }
+    }
+}

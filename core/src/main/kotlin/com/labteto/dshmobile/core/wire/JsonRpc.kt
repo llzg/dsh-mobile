@@ -1,0 +1,73 @@
+package com.labteto.dshmobile.core.wire
+
+import java.util.UUID
+import kotlinx.serialization.DeserializationStrategy
+import kotlinx.serialization.SerializationStrategy
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.serializer
+
+/**
+ * Shared wire JSON codec and envelope helpers.
+ *
+ * [WireJson] is lenient by design: unknown keys are ignored (the harness merge-extends its
+ * payloads), input values are coerced to declared types, defaults are always encoded (so the
+ * literal `type` discriminants and `accepted: true` markers reach the wire), and explicit nulls
+ * are suppressed (so absent optional fields stay absent — the harness rejects nulls where it
+ * expects an omitted optional).
+ */
+val WireJson: Json = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+    encodeDefaults = true
+    explicitNulls = false
+}
+
+/** Mint a fresh correlation id for a client-request (the initiator mints; responses echo). */
+fun newRpcId(): String = UUID.randomUUID().toString()
+
+/** Encode a client-request envelope (POST /api/<method> body). */
+fun encodeEnvelope(request: ClientRequest): String =
+    WireJson.encodeToString(ClientRequest.serializer(), request)
+
+/** Encode a client-response envelope (POST /api/respond body). */
+fun encodeClientResponse(response: ClientResponse): String =
+    WireJson.encodeToString(ClientResponse.serializer(), response)
+
+/** Decode and validate a server-response envelope (the HTTP response body of a unary call). */
+fun decodeServerResponse(json: String): ServerResponse {
+    val envelope: ServerResponse = WireJson.decodeFromString(ServerResponse.serializer(), json)
+    require(envelope.type == "server-response") {
+        "expected a server-response envelope but got type \"${envelope.type}\""
+    }
+    return envelope
+}
+
+/** Decode and validate a server-request envelope (one downstream stream frame). */
+fun decodeServerRequest(json: String): ServerRequest {
+    val envelope: ServerRequest = WireJson.decodeFromString(ServerRequest.serializer(), json)
+    require(envelope.type == "server-request") {
+        "expected a server-request envelope but got type \"${envelope.type}\""
+    }
+    return envelope
+}
+
+/** Encode a value to a [JsonElement] using an explicit serializer. */
+fun <T> encodeToJsonElement(serializer: SerializationStrategy<T>, value: T): JsonElement =
+    WireJson.encodeToJsonElement(serializer, value)
+
+/** Decode a [JsonElement] into a value using an explicit serializer. */
+fun <T> decodeFromJsonElement(serializer: DeserializationStrategy<T>, element: JsonElement): T =
+    WireJson.decodeFromJsonElement(serializer, element)
+
+/** Decode a [JsonElement] into a value of the inferred type. */
+inline fun <reified T> decodeFromJsonElement(element: JsonElement): T =
+    WireJson.decodeFromJsonElement(serializer<T>(), element)
+
+/** Convenience for tests and tooling: serialize any @Serializable value to a compact string. */
+fun <T> encodeToString(serializer: SerializationStrategy<T>, value: T): String =
+    WireJson.encodeToString(serializer, value)
+
+/** Convenience for tests and tooling: deserialize a compact string into a value. */
+inline fun <reified T> decodeFromString(json: String): T =
+    WireJson.decodeFromString(serializer<T>(), json)

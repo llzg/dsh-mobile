@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest an improvement for DSH Mobile
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Feature
+      description: What should the app do, and why is it useful?
+    validations:
+      required: true
+  - type: textarea
+    id: harness-parity
+    attributes:
+      label: Harness parity
+      description: Does the DeepSeek Harness web GUI already do this? If so, where?

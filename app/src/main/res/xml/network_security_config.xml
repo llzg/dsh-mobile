@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The DeepSeek Harness serves plain HTTP on the local network. Cleartext is
+     required to reach it; the app only ever talks to user-entered LAN hosts.
+     See SECURITY.md for the trust model. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

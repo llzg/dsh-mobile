@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a problem with DSH Mobile
+labels: [bug]
+body:
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: harness-version
+    attributes:
+      label: Harness version
+      description: Shown on the connect screen (host.describe).
+      placeholder: e.g. 0.1.0-rc.5
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: How are you connected?
+      options:
+        - Wi-Fi LAN mode (harness patch)
+        - adb reverse / loopback
+        - Manual host entry
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Steps to reproduce and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant details
+      description: Error messages shown in-app, adb logcat lines, screenshots.
