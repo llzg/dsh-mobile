@@ -1,8 +1,9 @@
 name: Release APK
 
-on:
+'on':
   push:
-    tags: ['v*']
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -19,14 +20,14 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Restore signing keystore
-        if: ${{ secrets.RELEASE_KEYSTORE != '' }}
+      - name: Restore signing keystore (optional)
+        if: secrets.RELEASE_KEYSTORE != ''
         env:
           KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE }}
         run: echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
 
       - name: Build release APK (signed)
-        if: ${{ secrets.RELEASE_KEYSTORE != '' }}
+        if: secrets.RELEASE_KEYSTORE != ''
         env:
           DSH_KEYSTORE: ${{ runner.temp }}/release.keystore
           DSH_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
@@ -35,7 +36,7 @@ jobs:
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Build release APK (unsigned)
-        if: ${{ secrets.RELEASE_KEYSTORE == '' }}
+        if: secrets.RELEASE_KEYSTORE == ''
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Checksums
