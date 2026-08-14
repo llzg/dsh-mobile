@@ -14,6 +14,7 @@ import com.labteto.dshmobile.core.wire.RpcResult
 import com.labteto.dshmobile.core.wire.ServerRequest
 import com.labteto.dshmobile.core.wire.decodeFromJsonElement
 import com.labteto.dshmobile.core.wire.dto.AskUserQuestionIntent
+import com.labteto.dshmobile.core.wire.dto.AskUserQuestionItem
 import com.labteto.dshmobile.core.wire.dto.ContentBlock
 import com.labteto.dshmobile.core.wire.dto.GoalClearRequest
 import com.labteto.dshmobile.core.wire.dto.GoalCompleteRequest
@@ -101,6 +102,22 @@ data class WorkspaceRow(
     val sessionIds: List<String>,
 )
 
+/** A pending sandbox/permission approval the user can answer (allow-once / reject). */
+data class PendingApproval(
+    val sessionId: String,
+    val approvalId: String,
+    val rpcId: String,
+    val toolName: String,
+    val reason: String?,
+)
+
+/** A pending ask_user_question batch (a plan review rides the same channel via its intent). */
+data class PendingQuestions(
+    val sessionId: String,
+    val rpcId: String,
+    val items: List<AskUserQuestionItem>,
+)
+
 /**
  * Single source of truth for the connected harness's live state. All public surface is
  * [StateFlow]; every RPC error becomes [connectionError] and never throws. The store survives
@@ -161,6 +178,12 @@ class SessionStore @Inject constructor(
     private val _subagentMode = MutableStateFlow<String?>(null)
     val subagentMode: StateFlow<String?> = _subagentMode.asStateFlow()
 
+    private val _pendingApproval = MutableStateFlow<PendingApproval?>(null)
+    val pendingApproval: StateFlow<PendingApproval?> = _pendingApproval.asStateFlow()
+
+    private val _pendingQuestions = MutableStateFlow<PendingQuestions?>(null)
+    val pendingQuestions: StateFlow<PendingQuestions?> = _pendingQuestions.asStateFlow()
+
     // ------------------------------------------------------------------ internal state (guarded by `lock`)
     private val sessionRows = LinkedHashMap<String, SessionRow>()
     private val runningBySession = HashMap<String, Boolean>()
@@ -183,7 +206,13 @@ class SessionStore @Inject constructor(
     private var currentQueue = emptyList<QueueItem>()
     private val toolViewsBySeq = HashMap<Long, ToolEventView>()
 
-    private data class ApprovalRequest(val sessionId: String, val approvalId: String, val rpcId: String)
+    private data class ApprovalRequest(
+        val sessionId: String,
+        val approvalId: String,
+        val rpcId: String,
+        val toolName: String,
+        val reason: String?,
+    )
     private data class ProjectionValue(val seq: Int, val value: JsonElement)
 
     init {
@@ -301,10 +330,18 @@ class SessionStore @Inject constructor(
 
     private fun handleApprovalRequested(rpcId: String, frame: MuxFrame.ApprovalRequested) {
         synchronized(lock) {
-            approvalRequests[frame.approvalId] = ApprovalRequest(frame.sessionId, frame.approvalId, rpcId)
+            approvalRequests[frame.approvalId] =
+                ApprovalRequest(frame.sessionId, frame.approvalId, rpcId, frame.toolName, frame.reason)
             addPendingLocked(frame.sessionId, "approval")
             emitSessionsLocked()
         }
+        _pendingApproval.value = PendingApproval(
+            sessionId = frame.sessionId,
+            approvalId = frame.approvalId,
+            rpcId = rpcId,
+            toolName = frame.toolName,
+            reason = frame.reason,
+        )
     }
 
     private fun handleApprovalResolved(frame: MuxFrame.ApprovalResolved) {
@@ -313,6 +350,7 @@ class SessionStore @Inject constructor(
             removePendingLocked(frame.sessionId, "approval")
             emitSessionsLocked()
         }
+        if (_pendingApproval.value?.approvalId == frame.approvalId) _pendingApproval.value = null
     }
 
     private fun handleQuestionRequested(rpcId: String, frame: MuxFrame.QuestionRequested) {
@@ -326,6 +364,7 @@ class SessionStore @Inject constructor(
             addPendingLocked(frame.sessionId, kind)
             emitSessionsLocked()
         }
+        _pendingQuestions.value = PendingQuestions(frame.sessionId, rpcId, frame.questions)
     }
 
     private fun handleQuestionResolved(frame: MuxFrame.QuestionResolved) {
@@ -335,6 +374,7 @@ class SessionStore @Inject constructor(
             removePendingLocked(frame.sessionId, "plan-review")
             emitSessionsLocked()
         }
+        if (_pendingQuestions.value?.sessionId == frame.sessionId) _pendingQuestions.value = null
     }
 
     private fun handleSessionQueue(frame: MuxFrame.SessionQueue) {
@@ -726,7 +766,24 @@ class SessionStore @Inject constructor(
         }
     }
 
-    suspend fun prompt(text: String, mode: String) {
+    suspend fun prompt(text: String, mode: String) =
+        promptContent(mode, listOf(PromptContentPart.Text(text)))
+
+    /** Prompt with an attached raster image (bytes submitted base64, as the browser wire does). */
+    suspend fun promptWithImage(
+        text: String,
+        mode: String,
+        mediaType: String,
+        base64Data: String,
+        name: String? = null,
+    ) {
+        val parts = mutableListOf<PromptContentPart>()
+        if (text.isNotBlank()) parts.add(PromptContentPart.Text(text))
+        parts.add(PromptContentPart.Image(mediaType, base64Data, name))
+        promptContent(mode, parts)
+    }
+
+    private suspend fun promptContent(mode: String, content: List<PromptContentPart>) {
         val sid = currentSessionId.value ?: return
         val api = apiOrNull() ?: return
         val safeMode = if (mode == "steer") "steer" else "queue"
@@ -734,7 +791,7 @@ class SessionStore @Inject constructor(
         val request = SessionPromptRequest(
             sessionId = sid,
             mode = safeMode,
-            content = listOf(PromptContentPart.Text(text)),
+            content = content,
             clientTimeZone = zone,
         )
         when (val r = api.sessionPrompt(request)) {
