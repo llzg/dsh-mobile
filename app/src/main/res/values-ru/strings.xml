@@ -49,6 +49,13 @@
     <string name="connect_harness_version">Harness %1$s · %2$s</string>
     <string name="connect_attached_sessions">Присоединено сеансов: %1$d</string>
     <string name="connect_disconnect">Отключиться</string>
+    <string name="connect_unreachable">Недоступен</string>
+    <string name="connect_checking">Проверка…</string>
+    <string name="connect_remembered_empty">Здесь появятся harness-серверы, к которым вы подключались.</string>
+    <string name="connect_scan_progress">Сканирование вашей сети… %1$d из %2$d</string>
+    <string name="connect_sessions_short">Сеансов: %1$d</string>
+    <string name="connect_never">Подключений не было</string>
+    <string name="connect_harness_version_only">Harness %1$s</string>
     <string name="chatlist_title">Чаты</string>
     <string name="chatlist_new_session">Новый сеанс</string>
     <string name="chatlist_new_session_in">Новая сессия в…</string>

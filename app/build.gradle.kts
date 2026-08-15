@@ -7,6 +7,28 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+/**
+ * The release version, taken from the git tag the release workflow is building.
+ *
+ * `DSH_VERSION_NAME` is the tag without its leading `v`. Hardcoding it here meant every tag after
+ * the first shipped an APK still claiming to be the first — same `versionCode`, so Android saw no
+ * upgrade at all. The code is derived from the name so it rises with semver on its own; the
+ * fallback is what a local `assembleRelease` builds.
+ */
+val dshVersionName: String = System.getenv("DSH_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "0.1.2"
+
+val dshVersionCode: Int = dshVersionName
+    .substringBefore('-')
+    .split('.')
+    .mapNotNull { it.toIntOrNull() }
+    .let { parts ->
+        val major = parts.getOrElse(0) { 0 }
+        val minor = parts.getOrElse(1) { 0 }
+        val patch = parts.getOrElse(2) { 0 }
+        major * 10_000 + minor * 100 + patch
+    }
+    .coerceAtLeast(1)
+
 android {
     namespace = "com.labteto.dshmobile"
     compileSdk = 35
@@ -15,8 +37,8 @@ android {
         applicationId = "com.labteto.dshmobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = dshVersionCode
+        versionName = dshVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }

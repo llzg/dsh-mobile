@@ -55,7 +55,9 @@ import com.labteto.dshmobile.core.session.WorkflowNode
 import com.labteto.dshmobile.core.wire.dto.ToolEventView
 import com.labteto.dshmobile.ui.components.AttachmentImage
 import com.labteto.dshmobile.ui.components.DisclosureRow
+import com.labteto.dshmobile.ui.components.DisclosureState
 import com.labteto.dshmobile.ui.components.DsPill
+import com.labteto.dshmobile.ui.components.FeatherIcons
 import com.labteto.dshmobile.ui.components.MarkdownText
 import com.labteto.dshmobile.ui.components.StateDot
 import com.labteto.dshmobile.ui.components.StateDotState
@@ -192,7 +194,7 @@ internal fun ChatNodeItem(node: ChatNode, context: ChatNodeContext) {
 }
 
 /** Event types that carry no user-facing content; they frame the transcript rather than fill it. */
-private val STRUCTURAL_EVENT_TYPES = setOf(
+internal val STRUCTURAL_EVENT_TYPES = setOf(
     "step/start",
     "step/end",
     "request/header",
@@ -339,19 +341,29 @@ private fun ToolCallRow(node: ToolCallNode, context: ChatNodeContext) {
         viewTitle = (resultView ?: callView).titleOrNull(),
     )
     var expanded by remember(node.callId) { mutableStateOf(false) }
+    // The leading slot carries the outcome: a red dot for a failed call, the tool glyph otherwise.
+    val state = when {
+        result?.isError == true -> DisclosureState.Error
+        result == null && context.running -> DisclosureState.Running
+        else -> DisclosureState.Idle
+    }
     ToolCard(
         view = card,
         expanded = expanded,
         onToggle = { expanded = !expanded },
         titleOverride = row.title,
         summaryOverride = row.summary,
+        iconOverride = row.variant.featherIcon(),
+        state = state,
     )
     if (result?.isError == true) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            StateDot(StateDotState.Error, size = 8.dp)
-            Spacer(Modifier.width(6.dp))
-            Text(stringResource(R.string.common_error), style = DsType.caption11, color = colors.error)
-        }
+        // The dot is colour-only, so the word stays — but without a second dot beside it.
+        Text(
+            stringResource(R.string.common_error),
+            style = DsType.caption11,
+            color = colors.error,
+            modifier = Modifier.padding(start = 26.dp),
+        )
     }
 }
 
@@ -371,6 +383,7 @@ private fun CompactionRow(node: CompactionNode) {
     DisclosureRow(
         title = stringResource(R.string.chat_compaction),
         summary = stringResource(R.string.chat_compaction_summary),
+        icon = FeatherIcons.Archive,
         expanded = expanded,
         onToggle = { expanded = !expanded },
     ) {
@@ -388,6 +401,7 @@ private fun CommandRow(node: CommandNode) {
     DisclosureRow(
         title = "/$name",
         summary = text,
+        icon = FeatherIcons.Terminal,
         expanded = expanded,
         onToggle = { expanded = !expanded },
     ) {
@@ -414,6 +428,7 @@ private fun WorkflowRow(
     DisclosureRow(
         title = stringResource(R.string.workflow_title),
         summary = listOfNotNull(name, workflowStatusLabel(status)).joinToString(" · ").ifEmpty { null },
+        icon = FeatherIcons.GitBranch,
         expanded = expanded,
         onToggle = { expanded = !expanded },
     ) {

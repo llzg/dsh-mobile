@@ -3,6 +3,7 @@ package com.labteto.dshmobile.ui.screens.main
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,9 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material3.Icon
@@ -29,11 +28,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.labteto.dshmobile.R
 import com.labteto.dshmobile.core.wire.dto.SessionModelsValue
 import com.labteto.dshmobile.ui.components.DsIconButton
+import com.labteto.dshmobile.ui.components.FeatherIcons
 import com.labteto.dshmobile.ui.components.StateDot
 import com.labteto.dshmobile.ui.components.StateDotState
 import com.labteto.dshmobile.ui.components.skeleton
@@ -53,6 +54,10 @@ internal enum class ChatTab { Chat, Trajectory }
  * status. Row two carries the ones that belong to the *session* — its title, its agent preset, its
  * subagents. Splitting them is what makes room for the model selector on the left without eliding
  * the session title down to nothing on a phone.
+ *
+ * The title and the chips share row two rather than stacking, and the row disappears entirely when
+ * it would be empty: four stacked rows of chrome over a white page ate a third of a phone screen
+ * before the first message, and the chip row kept its padding even with no chips to pad.
  */
 @Composable
 internal fun ChatTopBar(
@@ -81,60 +86,57 @@ internal fun ChatTopBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             DsIconButton(
-                icon = Icons.Filled.Menu,
+                icon = FeatherIcons.Menu,
                 contentDescription = stringResource(R.string.chatlist_open),
                 onClick = onOpenDrawer,
                 tint = colors.labelSecondary,
+                iconSize = 18.dp,
             )
-            ModelChip(models = models, onClick = onOpenModels)
+            ModelChip(models = models, onClick = onOpenModels, modifier = Modifier.weight(1f, fill = false))
             Spacer(Modifier.weight(1f))
             StateDot(if (running) StateDotState.Running else StateDotState.Idle)
             if (!detailsOpen) {
                 DsIconButton(
-                    icon = Icons.Filled.Info,
+                    icon = FeatherIcons.Info,
                     contentDescription = stringResource(R.string.chat_details_title),
                     onClick = onOpenDetails,
                     tint = colors.labelTertiary,
+                    iconSize = 18.dp,
                 )
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = DsSpacing.medium),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                title,
-                style = DsType.std14Strong,
-                color = colors.labelPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = DsSpacing.small, vertical = DsSpacing.tiny),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(DsSpacing.tiny),
-        ) {
-            if (agentPresetLabel != null) {
-                MetaChip(
-                    icon = Icons.Outlined.Dashboard,
-                    label = agentPresetLabel,
-                    onClick = onOpenPresets,
+        val hasChips = agentPresetLabel != null || subagentCount > 0
+        if (title.isNotBlank() || hasChips) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = DsSpacing.medium, vertical = DsSpacing.tiny),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(DsSpacing.tiny),
+            ) {
+                Text(
+                    title,
+                    style = DsType.std14Strong,
+                    color = colors.labelPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
-            }
-            if (subagentCount > 0) {
-                MetaChip(
-                    icon = Icons.Outlined.Groups,
-                    label = "$subagentCount",
-                    onClick = onOpenSubagents,
-                )
+                if (agentPresetLabel != null) {
+                    MetaChip(
+                        icon = Icons.Outlined.Dashboard,
+                        label = agentPresetLabel,
+                        onClick = onOpenPresets,
+                    )
+                }
+                if (subagentCount > 0) {
+                    MetaChip(
+                        icon = Icons.Outlined.Groups,
+                        label = "$subagentCount",
+                        onClick = onOpenSubagents,
+                    )
+                }
             }
         }
 
@@ -149,11 +151,15 @@ internal fun ChatTopBar(
  * calls it — the catalog's own names resolve that to `DeepSeek-V4-Pro Max`.
  */
 @Composable
-private fun ModelChip(models: SessionModelsValue?, onClick: () -> Unit) {
+private fun ModelChip(
+    models: SessionModelsValue?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = DsTheme.colors
     if (models == null) {
         Box(
-            Modifier
+            modifier
                 .padding(horizontal = DsSpacing.small)
                 .width(120.dp)
                 .height(14.dp)
@@ -168,7 +174,7 @@ private fun ModelChip(models: SessionModelsValue?, onClick: () -> Unit) {
     val modelLabel = model?.name ?: current.model
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .widthIn(max = 240.dp)
             .clip(DsShapes.cube)
             .clickable(onClick = onClick)
@@ -185,6 +191,7 @@ private fun ModelChip(models: SessionModelsValue?, onClick: () -> Unit) {
             color = colors.labelPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
         )
         effort?.let {
             Text(it.name, style = DsType.small13, color = colors.labelTertiary, maxLines = 1)
@@ -225,9 +232,10 @@ private fun MetaChip(
 }
 
 /**
- * The tab strip. Hand-rolled rather than Material's `TabRow` so the indicator can animate to the
- * label's own width instead of the full tab slot — with only two short labels, a full-width
- * indicator reads as a highlight bar rather than an underline.
+ * The tab strip, as a compact segmented control rather than underlined tabs.
+ *
+ * Two short labels sitting over a full-width underline read as a page heading and cost a row of
+ * their own; a 28dp track wraps to the labels and lets the chrome end there.
  */
 @Composable
 private fun ChatTabRow(tab: ChatTab, onTabChange: (ChatTab) -> Unit) {
@@ -235,12 +243,22 @@ private fun ChatTabRow(tab: ChatTab, onTabChange: (ChatTab) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = DsSpacing.medium),
-        horizontalArrangement = Arrangement.spacedBy(DsSpacing.large),
+            .padding(horizontal = DsSpacing.medium, vertical = DsSpacing.tiny),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        TabLabel(stringResource(R.string.chat_tab), tab == ChatTab.Chat) { onTabChange(ChatTab.Chat) }
-        TabLabel(stringResource(R.string.trajectory_title), tab == ChatTab.Trajectory) {
-            onTabChange(ChatTab.Trajectory)
+        Row(
+            modifier = Modifier
+                .clip(DsShapes.pillFull)
+                .background(colors.hoverSolid)
+                .padding(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            TabSegment(stringResource(R.string.chat_tab), tab == ChatTab.Chat) {
+                onTabChange(ChatTab.Chat)
+            }
+            TabSegment(stringResource(R.string.trajectory_title), tab == ChatTab.Trajectory) {
+                onTabChange(ChatTab.Trajectory)
+            }
         }
     }
     Spacer(
@@ -251,31 +269,38 @@ private fun ChatTabRow(tab: ChatTab, onTabChange: (ChatTab) -> Unit) {
     )
 }
 
+/**
+ * One segment. The selected one is accent-tinted, not merely a lighter grey.
+ *
+ * This is load-bearing, not decoration: the two views render a user message completely differently
+ * — a right-aligned bubble in Chat, a `> line` of caption text in the Trajectory ledger — so a
+ * reader who cannot tell at a glance which tab is live concludes the chat itself is broken. The
+ * first cut of this control put a white chip on a `#F1F3F5` track, a 3% difference, and leaned
+ * entirely on label darkness to carry the state.
+ */
 @Composable
-private fun TabLabel(text: String, selected: Boolean, onClick: () -> Unit) {
+private fun TabSegment(text: String, selected: Boolean, onClick: () -> Unit) {
     val colors = DsTheme.colors
-    val indicator by animateFloatAsState(
+    val emphasis by animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
         animationSpec = DsAnimations.tabSwap,
-        label = "tabIndicator",
+        label = "tabSegment",
     )
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(vertical = DsSpacing.small),
+            .heightIn(min = 24.dp)
+            .clip(DsShapes.pillFull)
+            .background(colors.accentTertiary.copy(alpha = emphasis))
+            // `selectable` rather than `clickable`: the tint is the only visual carrier of the
+            // state, so the selection has to reach assistive tech some other way.
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .padding(horizontal = DsSpacing.medium, vertical = DsSpacing.tiny),
     ) {
         Text(
             text,
             style = DsType.tabText,
             color = if (selected) colors.accent else colors.labelTertiary,
-        )
-        Spacer(Modifier.height(6.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(2.dp)
-                .background(colors.accent.copy(alpha = indicator)),
         )
     }
 }

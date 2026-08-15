@@ -28,6 +28,13 @@ jobs:
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
           fi
 
+      # The tag is the single source of the shipped version; see app/build.gradle.kts.
+      - name: Derive version from tag
+        run: echo "DSH_VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Unit tests
+        run: ./gradlew :core:test :mock-harness:test :app:testReleaseUnitTest --stacktrace
+
       - name: Build release APK
         env:
           DSH_KEYSTORE: ${{ runner.temp }}/release.keystore

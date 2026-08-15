@@ -49,6 +49,13 @@
     <string name="connect_harness_version">Harness %1$s · %2$s</string>
     <string name="connect_attached_sessions">แนบ %1$d เซสชัน</string>
     <string name="connect_disconnect">ตัดการเชื่อมต่อ</string>
+    <string name="connect_unreachable">เข้าถึงไม่ได้</string>
+    <string name="connect_checking">กำลังตรวจสอบ…</string>
+    <string name="connect_remembered_empty">ฮาร์เนสที่คุณเชื่อมต่อจะแสดงที่นี่</string>
+    <string name="connect_scan_progress">กำลังสแกนเครือข่ายของคุณ… %1$d จาก %2$d</string>
+    <string name="connect_sessions_short">%1$d เซสชัน</string>
+    <string name="connect_never">ยังไม่เคยเชื่อมต่อ</string>
+    <string name="connect_harness_version_only">ฮาร์เนส %1$s</string>
     <string name="chatlist_title">แชท</string>
     <string name="chatlist_new_session">เซสชันใหม่</string>
     <string name="chatlist_new_session_in">เซสชันใหม่ใน…</string>

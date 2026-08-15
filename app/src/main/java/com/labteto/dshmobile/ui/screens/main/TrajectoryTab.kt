@@ -149,6 +149,8 @@ private fun ToolLedgerRow(call: ToolCallNode, result: ToolResultNode?, cwd: Stri
         DisclosureRow(
             title = row.title,
             summary = row.summary,
+            // The ledger already leads with its own state dot, so the slot keeps the glyph.
+            icon = row.variant.featherIcon(),
             expanded = expanded,
             onToggle = { expanded = !expanded },
             modifier = Modifier.weight(1f),

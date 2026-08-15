@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.labteto.dshmobile.core.wire.WireJson
+import com.labteto.dshmobile.core.wire.dto.HostDescription
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -83,17 +84,54 @@ class HostsStore @Inject constructor(
         persist(current)
     }
 
-    suspend fun rememberHost(name: String, host: String, port: Int, isLoopback: Boolean): HostConfig {
+    /**
+     * Remember (or refresh) one endpoint.
+     *
+     * The id is stable across reconnects: `host:port` is the identity, so a returning harness keeps
+     * the id it already had. Minting a fresh UUID every time made the id useless as a list key and
+     * as a handle for anything stored per host. Cached describe fields survive a call that does not
+     * supply them.
+     */
+    suspend fun rememberHost(
+        name: String,
+        host: String,
+        port: Int,
+        isLoopback: Boolean,
+        description: HostDescription? = null,
+    ): HostConfig {
+        val existing = hosts.first().firstOrNull { it.host == host && it.port == port }
         val config = HostConfig(
-            id = UUID.randomUUID().toString(),
+            id = existing?.id ?: UUID.randomUUID().toString(),
             name = name,
             host = host,
             port = port,
             isLoopback = isLoopback,
             lastConnectedAt = System.currentTimeMillis(),
+            lastVersion = description?.version ?: existing?.lastVersion,
+            lastCwd = description?.cwd ?: existing?.lastCwd,
+            lastSessions = description?.attachedSessions ?: existing?.lastSessions,
         )
         upsertHost(config)
         return config
+    }
+
+    /** Fold a fresh `host.describe` into the remembered entry without touching its recency. */
+    suspend fun cacheDescription(host: String, port: Int, description: HostDescription) {
+        val current = hosts.first()
+        if (current.none { it.host == host && it.port == port }) return
+        persist(
+            current.map {
+                if (it.host == host && it.port == port) {
+                    it.copy(
+                        lastVersion = description.version,
+                        lastCwd = description.cwd,
+                        lastSessions = description.attachedSessions,
+                    )
+                } else {
+                    it
+                }
+            },
+        )
     }
 
     suspend fun removeHost(id: String) = persist(hosts.first().filterNot { it.id == id })

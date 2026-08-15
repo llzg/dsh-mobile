@@ -49,6 +49,13 @@
     <string name="connect_harness_version">Harness %1$s · %2$s</string>
     <string name="connect_attached_sessions">%1$d session(s) attachée(s)</string>
     <string name="connect_disconnect">Se déconnecter</string>
+    <string name="connect_unreachable">Injoignable</string>
+    <string name="connect_checking">Vérification…</string>
+    <string name="connect_remembered_empty">Les harness auxquels vous vous connectez apparaîtront ici.</string>
+    <string name="connect_scan_progress">Analyse de votre réseau… %1$d sur %2$d</string>
+    <string name="connect_sessions_short">%1$d session(s)</string>
+    <string name="connect_never">Jamais connecté</string>
+    <string name="connect_harness_version_only">Harness %1$s</string>
     <string name="chatlist_title">Discussions</string>
     <string name="chatlist_new_session">Nouvelle session</string>
     <string name="chatlist_new_session_in">Nouvelle session dans…</string>

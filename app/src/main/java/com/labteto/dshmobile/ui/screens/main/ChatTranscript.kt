@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -46,7 +48,11 @@ internal fun ChatTranscript(
     modifier: Modifier = Modifier,
 ) {
     val colors = DsTheme.colors
-    val nodes = conversation?.nodes ?: emptyList()
+    // Only the nodes that draw something: a zero-height item still costs its 4dp gap, and a turn's
+    // worth of structural events stacks those gaps into a blank band under the chrome.
+    val nodes = remember(conversation?.nodes) {
+        conversation?.nodes.orEmpty().filter { it.rendersContent() }
+    }
     val itemCount = nodes.size + if (conversation?.hasMore == true) 1 else 0
 
     var wasNearBottom by remember { mutableStateOf(true) }
@@ -71,9 +77,11 @@ internal fun ChatTranscript(
 
     LazyColumn(
         state = listState,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        // Bottom-anchored: a transcript shorter than the viewport belongs above the composer, not
+        // pinned under the tab strip with the empty half below it.
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom),
     ) {
         if (conversation?.hasMore == true) {
             item(key = "load-older") {

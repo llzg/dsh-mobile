@@ -41,6 +41,7 @@ import com.labteto.dshmobile.ui.components.DsButtonVariant
 import com.labteto.dshmobile.ui.components.DsDialog
 import com.labteto.dshmobile.ui.components.DsMenu
 import com.labteto.dshmobile.ui.components.DsPill
+import com.labteto.dshmobile.ui.components.FeatherIcons
 import com.labteto.dshmobile.ui.components.MenuItem
 import com.labteto.dshmobile.ui.components.SectionHeader
 import com.labteto.dshmobile.ui.components.StateDot
@@ -68,6 +69,7 @@ internal fun TodoDock(todos: List<TodoEntry>, modifier: Modifier = Modifier) {
     DisclosureRow(
         title = stringResource(R.string.chat_todo_title),
         summary = stringResource(R.string.chat_todo_progress, completed, todos.size),
+        icon = FeatherIcons.CheckSquare,
         expanded = expanded,
         onToggle = { expanded = !expanded },
         modifier = modifier,

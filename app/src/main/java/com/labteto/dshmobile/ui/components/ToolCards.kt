@@ -12,13 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -51,12 +44,19 @@ fun ToolCard(
      */
     titleOverride: String? = null,
     summaryOverride: String? = null,
+    /**
+     * Leading glyph from the transcript's tool-row model, which classifies by *tool name* where the
+     * card can only classify by the presenter shape it happened to receive.
+     */
+    iconOverride: ImageVector? = null,
+    /** Terminal state from the call's own result; null derives the running bit from the card. */
+    state: DisclosureState? = null,
 ) {
     DisclosureRow(
         title = titleOverride ?: view.displayTitle(),
         summary = summaryOverride ?: view.summary(),
-        icon = view.icon(),
-        running = view.isRunning(),
+        icon = iconOverride ?: view.icon(),
+        state = state ?: if (view.isRunning()) DisclosureState.Running else DisclosureState.Idle,
         expanded = expanded,
         onToggle = onToggle,
     ) {
@@ -97,12 +97,12 @@ private fun ToolCardView.summary(): String? = when (this) {
 }
 
 private fun ToolCardView.icon(): ImageVector = when (this) {
-    is ToolCardView.GenericCard -> Icons.Filled.Build
-    is ToolCardView.TerminalCard -> Icons.Filled.Terminal
-    is ToolCardView.DiffCard -> Icons.Filled.Code
-    is ToolCardView.SearchCard -> Icons.Filled.Search
-    is ToolCardView.ReadCard -> Icons.Filled.Description
-    is ToolCardView.WebCard -> Icons.Filled.Language
+    is ToolCardView.GenericCard -> FeatherIcons.Tool
+    is ToolCardView.TerminalCard -> FeatherIcons.Terminal
+    is ToolCardView.DiffCard -> FeatherIcons.Code
+    is ToolCardView.SearchCard -> FeatherIcons.Search
+    is ToolCardView.ReadCard -> FeatherIcons.FileText
+    is ToolCardView.WebCard -> FeatherIcons.Globe
 }
 
 private fun ToolCardView.isRunning(): Boolean = (this as? ToolCardView.TerminalCard)?.running == true

@@ -73,13 +73,22 @@ class DiscoveryEngine @Inject constructor(
     /**
      * Sweep the subnet(s) of this device on [ports], probing concurrently.
      * Returns discovered harnesses (probe failures are silently ignored).
+     *
+     * [onProgress] is called after each chunk with `(probed, total)`. A /24 at 32-wide concurrency
+     * and a 2.2 s worst-case probe runs for the better part of half a minute, which is far too long
+     * to show a static "scanning…" label and nothing else.
      */
-    suspend fun scan(ports: List<Int>): List<DiscoveredHost> = supervisorScope {
+    suspend fun scan(
+        ports: List<Int>,
+        onProgress: (probed: Int, total: Int) -> Unit = { _, _ -> },
+    ): List<DiscoveredHost> = supervisorScope {
         val subnets = localIpv4s()
         if (subnets.isEmpty()) return@supervisorScope emptyList()
         val candidates = subnets.flatMap { subnetCandidates(it) }.distinct()
         val portsSafe = ports.ifEmpty { listOf(3080) }
         val discovered = mutableListOf<DiscoveredHost>()
+        var probed = 0
+        onProgress(0, candidates.size)
 
         // Small bounded fan-out: 32 concurrent probes, chunked over the /24.
         candidates.chunked(32).forEach { chunk ->
@@ -89,13 +98,15 @@ class DiscoveryEngine @Inject constructor(
                     for (port in portsSafe) {
                         val desc = runCatching { probe(ip, port) }.getOrNull()
                         if (desc != null) {
-                            last = DiscoveredHost(ip, port, desc.version, desc.cwd)
+                            last = DiscoveredHost(ip, port, desc)
                             break
                         }
                     }
                     last
                 }
             }.awaitAll().filterNotNull().forEach { discovered.add(it) }
+            probed += chunk.size
+            onProgress(probed, candidates.size)
         }
         discovered
     }

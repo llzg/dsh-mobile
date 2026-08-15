@@ -90,6 +90,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -1252,24 +1253,43 @@ class SessionStore @Inject constructor(
     /**
      * Run one complete slash-command line.
      *
-     * Goes through `session.prompt` rather than the typert remote on purpose: the host executes a
-     * prompt that is exactly one leading-slash text block through the command registry and never
-     * sends it to the model, so this write path works even against a build with no gateway.
+     * The typert remote is the *only* command write path: `session.prompt` does not inspect its
+     * content, so a leading-slash prompt reaches the model as ordinary user text (this store used
+     * to send commands that way, which is why picking a permission preset made the agent shell out
+     * to figure out what `/permission` meant). See `docs/PROTOCOL.md`.
+     *
+     * The remote answers `undefined` when the line parses to no registered command, and the wire
+     * codec folds an absent `value` slot into an empty object — so the discriminator is the
+     * presence of `commandId`, not the emptiness of the value.
      */
     suspend fun runCommand(line: String): CommandOutcome {
         val sid = currentSessionId.value ?: return CommandOutcome.Failed("no open session")
         val api = apiOrNull() ?: return CommandOutcome.Failed("not connected")
-        val request = SessionPromptRequest(
-            sessionId = sid,
-            mode = "queue",
-            content = listOf(PromptContentPart.Text(line)),
-            clientTimeZone = TimeZone.getDefault().id,
-        )
-        return when (val r = api.sessionPrompt(request)) {
-            is RpcResult.Ok -> CommandOutcome.Ok(r.value.command?.text)
+        return when (val r = api.commandsExecute(sid, line)) {
+            is RpcResult.Ok -> {
+                val execution = r.value as? JsonObject
+                val commandId = execution?.get("commandId")
+                if (commandId == null || commandId is JsonNull) {
+                    CommandOutcome.Unknown(line)
+                } else {
+                    val result = execution["result"] as? JsonObject
+                    val text = (result?.get("text") as? JsonPrimitive)?.contentOrNull
+                    if ((result?.get("kind") as? JsonPrimitive)?.contentOrNull == "error") {
+                        CommandOutcome.Failed(text ?: "command failed")
+                    } else {
+                        CommandOutcome.Ok(text)
+                    }
+                }
+            }
             is RpcResult.Err -> when (r.error.code) {
-                "unknown-command" -> CommandOutcome.Unknown(line)
-                "command-error" -> CommandOutcome.Failed(r.error.message)
+                // No command gateway in this build (404) or the trust fence refused it (403).
+                // Neither is a connection fault, so the menu retires rather than the session.
+                "capability-unavailable", "forbidden" -> {
+                    _commandsAvailable.value = false
+                    _commands.value = emptyList()
+                    log("commands/execute unavailable (${r.error.code}): ${r.error.message}")
+                    CommandOutcome.Failed(r.error.message)
+                }
                 else -> {
                     setConnectionError(r.error.message)
                     CommandOutcome.Failed(r.error.message)

@@ -49,6 +49,13 @@
     <string name="connect_harness_version">Harness %1$s · %2$s</string>
     <string name="connect_attached_sessions">%1$d सेशन जुड़े हुए</string>
     <string name="connect_disconnect">डिस्कनेक्ट करें</string>
+    <string name="connect_unreachable">पहुँच से बाहर</string>
+    <string name="connect_checking">जाँच हो रही है…</string>
+    <string name="connect_remembered_empty">आप जिन हार्नेस से कनेक्ट करेंगे वे यहाँ दिखेंगे।</string>
+    <string name="connect_scan_progress">आपका नेटवर्क स्कैन हो रहा है… %2$d में से %1$d</string>
+    <string name="connect_sessions_short">%1$d सेशन</string>
+    <string name="connect_never">कभी कनेक्ट नहीं हुआ</string>
+    <string name="connect_harness_version_only">हार्नेस %1$s</string>
     <string name="chatlist_title">चैट</string>
     <string name="chatlist_new_session">नया सेशन</string>
     <string name="chatlist_new_session_in">नए सेशन के लिए…</string>

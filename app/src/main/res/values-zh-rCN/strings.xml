@@ -49,6 +49,13 @@
     <string name="connect_harness_version">Harness %1$s · %2$s</string>
     <string name="connect_attached_sessions">已附加 %1$d 个会话</string>
     <string name="connect_disconnect">断开连接</string>
+    <string name="connect_unreachable">无法连接</string>
+    <string name="connect_checking">正在检查…</string>
+    <string name="connect_remembered_empty">你连接过的 harness 会显示在这里。</string>
+    <string name="connect_scan_progress">正在扫描你的网络… %1$d / %2$d</string>
+    <string name="connect_sessions_short">%1$d 个会话</string>
+    <string name="connect_never">从未连接</string>
+    <string name="connect_harness_version_only">Harness %1$s</string>
     <string name="chatlist_title">会话</string>
     <string name="chatlist_new_session">新建会话</string>
     <string name="chatlist_new_session_in">新建会话到…</string>

@@ -323,14 +323,20 @@ data class SessionSelectModelValue(
     @SerialName("selected") val selected: ModelSelection,
 )
 
-/** The optional command slot of `session.prompt` when the prompt dispatched a slash command. */
+/**
+ * The command slot the `session.prompt` schema still declares.
+ *
+ * Dead on arrival: the host's prompt handler never inspects the content for a leading slash and
+ * therefore never fills this in. Commands are executed through the `commands/execute` remote (see
+ * `docs/PROTOCOL.md`). Kept only so the schema still decodes if a host ever populates it.
+ */
 @Serializable
 data class PromptCommand(
     @SerialName("kind") val kind: String = "success",
     @SerialName("text") val text: String? = null,
 )
 
-/** Value of `session.prompt`. */
+/** Value of `session.prompt`. [command] is always absent in practice — see [PromptCommand]. */
 @Serializable
 data class SessionPromptValue(
     @SerialName("accepted") val accepted: Boolean = true,

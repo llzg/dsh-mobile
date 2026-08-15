@@ -1,5 +1,7 @@
 package com.labteto.dshmobile.ui.screens.main
 
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.labteto.dshmobile.ui.components.FeatherIcons
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
@@ -72,6 +74,23 @@ internal data class ToolRowModel(
 
 internal fun classifyTool(toolName: String): ToolRowVariant =
     TOOL_VARIANTS[toolName.lowercase()] ?: ToolRowVariant.Other
+
+/**
+ * The row's leading glyph, keyed on the same variant as the verb.
+ *
+ * Deriving it here rather than from the card's presenter shape is what makes the icon column agree
+ * with the verb column: a `web_fetch` reads `Read` and gets the page glyph, not whatever card the
+ * host chose to render its result in.
+ */
+internal fun ToolRowVariant.featherIcon(): ImageVector = when (this) {
+    ToolRowVariant.Search -> FeatherIcons.Search
+    ToolRowVariant.Read -> FeatherIcons.FileText
+    ToolRowVariant.Bash -> FeatherIcons.Terminal
+    ToolRowVariant.Write -> FeatherIcons.FilePlus
+    ToolRowVariant.Edit -> FeatherIcons.Edit3
+    ToolRowVariant.Code -> FeatherIcons.Code
+    ToolRowVariant.Other -> FeatherIcons.Tool
+}
 
 /**
  * Build the row header for one call.

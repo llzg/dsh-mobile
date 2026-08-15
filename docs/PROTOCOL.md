@@ -42,9 +42,18 @@ both mean "this build does not offer that", not "the connection is broken", so
 the client maps them to `capability-unavailable` / `forbidden` and hides the
 feature instead of reporting a failure.
 
-A prompt whose content is exactly one text block starting with `/` is executed
-as a slash command and never reaches the model, so `session.prompt` is a working
-write path for commands even against a build with no gateway.
+`commands/execute` (`{"args":{"agentId","line"}}`) is the **only** command write
+path. `session.prompt` does not inspect its content — a leading-slash prompt
+reaches the model as ordinary user text — so the client adjudicates the draft
+against `commands/list` before sending and only calls `session.prompt` when the
+line names no registered command. That miss is load-bearing: a `/name` line the
+catalog does not claim is how a *skill* is invoked, and the host's pre-step
+boundary resolves it. The remote answers with no `value` when the line parses to
+no command; since the codec folds an absent value into `{}`, the discriminator is
+the presence of `commandId`.
+
+The `command` slot on `session.prompt`'s response, and the `unknown-command` /
+`command-error` codes, are dead schema the host never populates.
 
 ### Downloads (no envelope)
 
