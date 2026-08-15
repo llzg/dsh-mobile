@@ -1,39 +1,64 @@
-# DSH Mobile — DeepSeek Harness Remote
+<p align="center">
+  <img src="docs/images/banner.jpg" alt="DSH Mobile — the DeepSeek Harness in your pocket" width="100%">
+</p>
 
-> An open-source Android companion that puts your **DeepSeek Harness** in
-> your pocket. Drive sessions, review plans and goals, answer approvals and
-> questions, and get notified when the harness finishes — from your phone,
-> over your local network.
+<h1 align="center">DSH Mobile — DeepSeek Harness Remote</h1>
+
+<p align="center">
+  An open-source Android companion that puts your <b>DeepSeek Harness</b> in your pocket.<br>
+  Drive sessions, review plans and goals, answer approvals and questions, and get notified
+  when the harness finishes — from your phone, over your local network.
+</p>
+
+<p align="center">
+  <a href="https://github.com/sorsama/deepseek-harness-mobile/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/sorsama/deepseek-harness-mobile?style=flat-square"></a>
+  <a href="https://github.com/sorsama/deepseek-harness-mobile/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/sorsama/deepseek-harness-mobile/ci.yml?branch=main&style=flat-square"></a>
+  <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square">
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
+</p>
 
 DSH Mobile is an **unofficial companion app** for the
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (MIT),
-mirroring its web GUI feature-for-feature in the harness's own visual
-language. Android only, Kotlin + Jetpack Compose.
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (MIT), mirroring its web GUI
+feature-for-feature in the harness's own visual language. Android only, Kotlin + Jetpack Compose.
+
+---
+
+## Screenshots
+
+| Connect | Chat | Trajectory |
+|:--:|:--:|:--:|
+| <img src="docs/images/home.png" width="240" alt="Connect screen: recent harnesses with live reachability, discovery, manual entry and auto-connect toggles"> | <img src="docs/images/chat.png" width="240" alt="Chat: streamed turns with per-tool icons, tool cards, goal dock and composer"> | <img src="docs/images/trajectory.png" width="240" alt="Trajectory: a per-turn ledger with usage totals"> |
+| Recent harnesses with live reachability, LAN discovery, manual `host:port`, auto-connect. | Streamed turns, a glyph per tool, expandable tool cards, permission picker. | The same session as a per-turn ledger with usage totals. |
+
+| Session details | Subagents |
+|:--:|:--:|
+| <img src="docs/images/session-info.png" width="240" alt="Details panel: context breakdown, goal, plan mode, jobs, queue, subagents, host information"> | <img src="docs/images/subagent.png" width="240" alt="Subagent catalog with continuable children"> |
+| Context breakdown, goal, plan mode, background jobs, queued turns, host info, session-log export. | The subagent catalog — open a child's transcript, follow up, or interrupt it. |
 
 ## Features
 
-- **Connect effortlessly** — auto-discovers a harness running on your Wi-Fi
-  (active subnet scan + readiness handshake), remembers hosts, supports
-  manual `host:port` entry, loopback for same-device setups, and
-  auto-connect toggles (last used / LAN / same device).
-- **Discord-style navigation** — swipe right from the left edge to open the
-  workspace-grouped chat list, swipe left to close it, swipe left from the
-  right edge for the session details panel.
-- **Full chat experience** — streamed turns with reasoning disclosure,
-  markdown, terminal/diff/read/search/web tool cards, queue dock
-  (edit / remove / steer), history paging, image attachments.
-- **Everything the GUI does** — goals (phases, rounds, pause/resume/edit),
-  plan mode + plan review, permission approvals, user questions, todo dock,
-  subagents (catalog, follow-ups, interrupt), background jobs, workflow
-  runs, skills, model selection, agent presets, session search, trajectory
-  ledger, session export, message feedback.
-- **Notifications** — turn complete, goal complete / blocked, review or
-  question waiting for you; background connection via a foreground service.
-- **Looks like the harness** — the exact DeepSeek Harness design tokens
-  (colors, type, radii, disclosure rows, shimmer, ink buttons) with
-  light / dark / system themes.
-- **11 languages** — English, 中文, हिन्दी, Español, Français, العربية,
-  বাংলা, Português, Русский, اردو, ไทย (RTL aware).
+- **Connect effortlessly** — auto-discovers a harness on your Wi-Fi (active subnet scan +
+  readiness handshake), remembers hosts and probes them for liveness on the way in, supports
+  manual `host:port` entry, loopback for same-device setups, and auto-connect toggles
+  (last used / LAN / same device).
+- **Discord-style navigation** — swipe right from the left edge to open the workspace-grouped
+  chat list, swipe left to close it, swipe left from the right edge for the session details panel.
+- **Full chat experience** — streamed turns with reasoning disclosure, markdown,
+  terminal/diff/read/search/web tool cards, queue dock (edit / remove / steer), history paging,
+  image attachments.
+- **Slash commands and skills** — the composer adjudicates a `/` line against the session's own
+  command catalog and runs it through the harness's command gateway; anything the catalog does not
+  claim is sent as a prompt, which is how skills are invoked.
+- **Everything the GUI does** — goals (phases, rounds, pause/resume/edit), plan mode + plan review,
+  permission approvals, user questions, todo dock, subagents (catalog, follow-ups, interrupt),
+  background jobs, workflow runs, skills, model selection, agent presets, session search,
+  trajectory ledger, session export, message feedback.
+- **Notifications** — turn complete, goal complete / blocked, review or question waiting for you;
+  background connection via a foreground service.
+- **Looks like the harness** — the exact DeepSeek Harness design tokens (colors, type, radii,
+  disclosure rows, shimmer, ink buttons) with light / dark / system themes.
+- **11 languages** — English, 中文, हिन्दी, Español, Français, العربية, বাংলা, Português, Русский,
+  اردو, ไทย (RTL aware).
 
 ## Requirements
 
@@ -44,22 +69,21 @@ language. Android only, Kotlin + Jetpack Compose.
 ## Quick start
 
 1. Install the latest APK from
-   [Releases](https://github.com/LabTeto/dsh-mobile/releases).
+   [Releases](https://github.com/sorsama/deepseek-harness-mobile/releases/latest).
 2. On your computer, make the harness reachable from your phone:
-   - **USB / emulator:** `dsh web`, then
-     `adb reverse tcp:3080 tcp:3080` — in the app connect to
+   - **USB / emulator:** `dsh web`, then `adb reverse tcp:3080 tcp:3080` — in the app connect to
      `127.0.0.1:3080`.
    - **Wi-Fi:** apply the one-file LAN patch described in
-     [`harness/README.md`](harness/README.md), restart `dsh web`, then tap
-     **Scan network** in the app.
+     [`harness/README.md`](harness/README.md), restart `dsh web`, then tap **Scan network**
+     in the app.
 3. Pick a session, chat, and get notified when the harness is done.
 
 ## Compatibility & security
 
-- See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the harness version
-  matrix and loopback-only surfaces.
-- **Read [docs/SECURITY.md](docs/SECURITY.md) first** — the harness has no
-  authentication; only use LAN mode on trusted networks.
+- See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the harness version matrix and
+  loopback-only surfaces.
+- **Read [docs/SECURITY.md](docs/SECURITY.md) first** — the harness has no authentication; only
+  use LAN mode on trusted networks. The app says so on the connect screen for the same reason.
 
 ## Building
 
@@ -68,8 +92,12 @@ language. Android only, Kotlin + Jetpack Compose.
 ./gradlew :app:assembleRelease    # release APK (signed when keystore env is set)
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop against a
-real harness, the module layout, and the release workflow.
+The shipped version comes from the git tag: the release workflow exports `DSH_VERSION_NAME` from
+the tag name, and `versionCode` is derived from it. A local build falls back to the literal in
+`app/build.gradle.kts`.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop against a real harness, the module
+layout, and the release workflow.
 
 ## Repository
 
@@ -80,8 +108,10 @@ real harness, the module layout, and the release workflow.
 | `mock-harness/` | Ktor mock of the harness `/api` server for tests |
 | `tools/capture/` | Records real harness traffic into conformance fixtures |
 | `harness/` | Companion patch + guide for LAN mode |
+| `docs/` | [Architecture](docs/ARCHITECTURE.md), [protocol notes](docs/PROTOCOL.md), [compatibility](docs/COMPATIBILITY.md), [security](docs/SECURITY.md) |
 
 ## License
 
-[MIT](LICENSE). The DeepSeek Harness and its brand are property of their
-respective owners; this project is an independent, community-built remote.
+[MIT](LICENSE). Bundled third-party material is listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The DeepSeek Harness and its brand are property
+of their respective owners; this project is an independent, community-built remote.
