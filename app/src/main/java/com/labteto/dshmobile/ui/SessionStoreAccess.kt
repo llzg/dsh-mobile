@@ -1,0 +1,33 @@
+package com.labteto.dshmobile.ui
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import com.labteto.dshmobile.data.SessionStore
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
+
+/**
+ * Hilt entry point for the process-scoped [SessionStore].
+ *
+ * The store is a [javax.inject.Singleton], not a [androidx.lifecycle.ViewModel] — it outlives every
+ * screen and owns the live mirror of the connected harness — so composables resolve it through an
+ * app-scoped entry point rather than `hiltViewModel()`. One declaration serves every screen;
+ * duplicating it per file would mean several Hilt-generated accessors for one singleton.
+ */
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface SessionStoreEntryPoint {
+    fun sessionStore(): SessionStore
+}
+
+/** Resolves the process-scoped [SessionStore] once per composition. */
+@Composable
+internal fun rememberSessionStore(): SessionStore {
+    val context = LocalContext.current.applicationContext
+    return remember {
+        EntryPointAccessors.fromApplication(context, SessionStoreEntryPoint::class.java).sessionStore()
+    }
+}

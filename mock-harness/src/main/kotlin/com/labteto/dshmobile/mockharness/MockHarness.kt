@@ -11,7 +11,10 @@ import io.ktor.server.netty.NettyApplicationEngine
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.host
 import io.ktor.server.request.receiveText
+import io.ktor.server.response.header
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
@@ -58,6 +61,10 @@ class MockHarness(
     @Volatile
     private var describeTransform: ((JsonObject) -> JsonObject)? = null
 
+    /** Body served by `GET /api/session.export`; tests set this to assert on the streamed bytes. */
+    @Volatile
+    var sessionExportBytes: ByteArray = ByteArray(0)
+
     private val normalizedTrustedHosts: Set<String> =
         trustedHosts.mapTo(mutableSetOf()) { normalizeHost(it) }
 
@@ -74,8 +81,19 @@ class MockHarness(
         val newServer = embeddedServer(Netty, port = port, host = "127.0.0.1") {
             install(WebSockets)
             routing {
+                get("/api/session.export") {
+                    call.handleSessionExport()
+                }
                 post("/api/{method}") {
                     call.handleApi()
+                }
+                // The typert Remote gateway lives on a second path segment
+                // (`/api/commands/execute`) but shares the ordinary envelope, so it maps onto the
+                // same handler under the composed method name.
+                post("/api/{namespace}/{method}") {
+                    val namespace = call.parameters["namespace"].orEmpty()
+                    val method = call.parameters["method"].orEmpty()
+                    call.handleApi("$namespace/$method")
                 }
                 webSocket("/api/events.mux") {
                     handleMuxSocket()
@@ -155,12 +173,30 @@ class MockHarness(
      */
     suspend fun pushHost(frame: JsonElement) = broadcast(hostSockets, frame)
 
-    private suspend fun ApplicationCall.handleApi() {
+    /**
+     * The session-log download: a plain `GET` answered with an attachment, not an RPC. Serves
+     * whatever [sessionExportBytes] holds so a test can assert on the streamed content.
+     */
+    private suspend fun ApplicationCall.handleSessionExport() {
         if (!isTrustedHost(request.hostHeader())) {
             respondText("Forbidden", status = HttpStatusCode.Forbidden)
             return
         }
-        val pathMethod = parameters["method"] ?: ""
+        val sessionId = request.queryParameters["sessionId"]
+        if (sessionId.isNullOrBlank()) {
+            respondText("missing sessionId", status = HttpStatusCode.BadRequest)
+            return
+        }
+        response.header("Content-Disposition", "attachment; filename=\"dsh-session-$sessionId.zip\"")
+        respondBytes(sessionExportBytes, ContentType.Application.Zip)
+    }
+
+    private suspend fun ApplicationCall.handleApi(pathMethodOverride: String? = null) {
+        if (!isTrustedHost(request.hostHeader())) {
+            respondText("Forbidden", status = HttpStatusCode.Forbidden)
+            return
+        }
+        val pathMethod = pathMethodOverride ?: parameters["method"] ?: ""
         if (pathMethod == "respond") {
             respondJson("""{"accepted":true}""")
             return

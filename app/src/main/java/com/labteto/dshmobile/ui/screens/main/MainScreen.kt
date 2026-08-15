@@ -24,7 +24,7 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import com.labteto.dshmobile.ui.theme.DsAnimations
 import kotlinx.coroutines.launch
 
 /**
@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
  * never conflict.
  */
 @Composable
-fun MainScreen(onOpenSettings: () -> Unit, viewModel: MainViewModel = hiltViewModel()) {
+fun MainScreen(onOpenSettings: () -> Unit) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var detailsOpen by remember { mutableStateOf(false) }
@@ -112,13 +112,16 @@ fun MainScreen(onOpenSettings: () -> Unit, viewModel: MainViewModel = hiltViewMo
         ) {
             ChatScreen(
                 onOpenDetails = { detailsOpen = true },
+                onOpenDrawer = { scope.launch { drawerState.open() } },
                 detailsOpen = detailsOpen,
             )
 
             AnimatedVisibility(
                 visible = detailsOpen,
-                enter = slideInHorizontally(initialOffsetX = { it }),
-                exit = slideOutHorizontally(targetOffsetX = { it }),
+                // Explicit spec: the platform default runs 300ms, which lags behind the drag the
+                // panel is usually opened with.
+                enter = slideInHorizontally(DsAnimations.panelSlide) { it },
+                exit = slideOutHorizontally(DsAnimations.panelSlide) { it },
                 modifier = Modifier.align(Alignment.CenterEnd),
             ) {
                 DetailsPanel(

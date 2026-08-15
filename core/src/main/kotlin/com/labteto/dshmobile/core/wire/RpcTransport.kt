@@ -1,10 +1,13 @@
 package com.labteto.dshmobile.core.wire
 
 import java.io.IOException
+import java.io.InputStream
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import okhttp3.Call
 import okhttp3.Callback
@@ -42,6 +45,19 @@ interface RpcTransport {
      * [RpcTransportException] on a non-2xx status or transport failure.
      */
     suspend fun post(path: String, body: String): RpcHttpResponse
+
+    /**
+     * GET a binary download from [path] (e.g. "/api/session.export?sessionId=…"), the harness's
+     * one non-envelope read channel.
+     *
+     * [consume] runs on an IO thread with the response still open and must not retain the stream —
+     * the connection is released as soon as it returns. Throws [RpcTransportException] on a non-2xx
+     * status or transport failure.
+     */
+    suspend fun <T> download(
+        path: String,
+        consume: (contentType: String?, contentDisposition: String?, body: InputStream) -> T,
+    ): T
 }
 
 /** JSON media type used for every /api POST. */
@@ -99,17 +115,50 @@ class OkHttpRpcTransport(
                         if (resp.isSuccessful) {
                             continuation.resume(RpcHttpResponse(resp.code, responseBody))
                         } else {
-                            val message = if (resp.code == 403) {
-                                "harness trust fence rejected the request (HTTP 403)"
-                            } else {
-                                "carrier returned HTTP ${resp.code}"
-                            }
-                            continuation.resumeWithException(RpcTransportException(resp.code, message))
+                            continuation.resumeWithException(
+                                RpcTransportException(resp.code, carrierMessage(resp.code)),
+                            )
                         }
                     }
                 }
             })
         }
+
+    /**
+     * Downloads reuse the unary client's connection pool but relax the read timeout: a session log
+     * ZIP is streamed and compressed on the fly, so 30s is a false deadline on a long session.
+     */
+    private val downloadClient: OkHttpClient by lazy {
+        httpClient.newBuilder().readTimeout(10, TimeUnit.MINUTES).build()
+    }
+
+    override suspend fun <T> download(
+        path: String,
+        consume: (contentType: String?, contentDisposition: String?, body: InputStream) -> T,
+    ): T = withContext(Dispatchers.IO) {
+        val target = base.resolve(path)
+            ?: throw RpcTransportException(0, "cannot resolve $path against $base")
+        val request = Request.Builder()
+            .url(target)
+            .header("Host", hostHeader)
+            .get()
+            .build()
+        val response = try {
+            downloadClient.newCall(request).execute()
+        } catch (e: IOException) {
+            throw RpcTransportException(0, "transport failure: ${e.message}", e)
+        }
+        response.use { resp ->
+            if (!resp.isSuccessful) throw RpcTransportException(resp.code, carrierMessage(resp.code))
+            val body = resp.body
+                ?: throw RpcTransportException(resp.code, "download carried no body")
+            consume(
+                resp.header("Content-Type"),
+                resp.header("Content-Disposition"),
+                body.byteStream(),
+            )
+        }
+    }
 
     private companion object {
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
@@ -117,6 +166,13 @@ class OkHttpRpcTransport(
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
+
+        /** Carrier-layer failure text; 403 names the trust fence because that is the usual cause. */
+        fun carrierMessage(status: Int): String = if (status == 403) {
+            "harness trust fence rejected the request (HTTP 403)"
+        } else {
+            "carrier returned HTTP $status"
+        }
     }
 }
 

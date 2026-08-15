@@ -12,6 +12,18 @@ sealed interface ContentBlockView {
 
     /** Reasoning trace, rendered muted. */
     data class ReasoningBlock(val text: String) : ContentBlockView
+
+    /**
+     * A raster the tool produced — a screenshot, a rendered chart. The intrinsic size travels with
+     * the reference so the decoder can downsample without a bounds-only pass.
+     */
+    data class ImageBlock(
+        val attachmentId: String,
+        val mediaType: String,
+        val width: Int,
+        val height: Int,
+        val name: String? = null,
+    ) : ContentBlockView
 }
 
 /** One diff hunk: [path] plus the removed [oldText] and/or added [newText] lines. */

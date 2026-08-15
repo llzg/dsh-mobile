@@ -44,10 +44,17 @@ fun ToolCard(
     view: ToolCardView,
     expanded: Boolean,
     onToggle: () -> Unit,
+    /**
+     * Header overrides from the transcript's own tool-row model, which knows the tool name and the
+     * session's working directory and can therefore say `Read · app\build.gradle.kts` where the
+     * card alone would only manage a presenter title and a block count.
+     */
+    titleOverride: String? = null,
+    summaryOverride: String? = null,
 ) {
     DisclosureRow(
-        title = view.displayTitle(),
-        summary = view.summary(),
+        title = titleOverride ?: view.displayTitle(),
+        summary = summaryOverride ?: view.summary(),
         icon = view.icon(),
         running = view.isRunning(),
         expanded = expanded,
@@ -447,6 +454,13 @@ private fun GenericBody(card: ToolCardView.GenericCard) {
                         block.text,
                         style = DsType.mdSmall.copy(color = colors.labelTertiary),
                         color = colors.labelTertiary,
+                    )
+                    // A tool that returns a screenshot arrives here, not on the message path.
+                    is ContentBlockView.ImageBlock -> AttachmentImage(
+                        attachmentId = block.attachmentId,
+                        intrinsicWidth = block.width,
+                        intrinsicHeight = block.height,
+                        contentDescription = block.name,
                     )
                 }
             }

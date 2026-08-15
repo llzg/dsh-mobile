@@ -10,7 +10,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,9 +33,12 @@ class HostsStore @Inject constructor(
         val THEME = stringPreferencesKey("theme")
         val LOCALE = stringPreferencesKey("locale")
         val PORTS = stringPreferencesKey("ports_json")
+        val LAST_SESSIONS = stringPreferencesKey("last_sessions_json")
+        val SESSION_SORT = stringPreferencesKey("session_sort")
     }
 
     private val hostsSerializer = ListSerializer(HostConfig.serializer())
+    private val lastSessionsSerializer = MapSerializer(String.serializer(), String.serializer())
 
     val hosts: Flow<List<HostConfig>> = dataStore.data.map { prefs ->
         val raw = prefs[Keys.HOSTS] ?: return@map emptyList()
@@ -94,6 +98,39 @@ class HostsStore @Inject constructor(
 
     suspend fun removeHost(id: String) = persist(hosts.first().filterNot { it.id == id })
 
+    /**
+     * The session last opened on [hostKey] (`"host:port"`), or null when this harness has not been
+     * used before. Keyed per host because session ids are host-scoped — one global key would try to
+     * reopen a stale id from a different harness after every host switch.
+     */
+    suspend fun lastSessionId(hostKey: String): String? = lastSessions()[hostKey]
+
+    /** Remember [sessionId] as the landing session for [hostKey], keeping the newest 8 hosts. */
+    suspend fun setLastSessionId(hostKey: String, sessionId: String) {
+        val next = LinkedHashMap<String, String>()
+        next[hostKey] = sessionId
+        lastSessions().forEach { (key, value) -> if (key != hostKey) next[key] = value }
+        val trimmed = next.entries.take(MAX_REMEMBERED_HOSTS).associate { it.key to it.value }
+        dataStore.edit { it[Keys.LAST_SESSIONS] = WireJson.encodeToString(lastSessionsSerializer, trimmed) }
+    }
+
+    /** Forget every remembered landing session (the Settings "clear data" action). */
+    suspend fun clearLastSessions() {
+        dataStore.edit { it.remove(Keys.LAST_SESSIONS) }
+    }
+
+    private suspend fun lastSessions(): Map<String, String> {
+        val raw = dataStore.data.first()[Keys.LAST_SESSIONS] ?: return emptyMap()
+        return runCatching { WireJson.decodeFromString(lastSessionsSerializer, raw) }.getOrDefault(emptyMap())
+    }
+
+    /** Drawer session ordering: `"manual"` follows the workspace order, `"updated"` sorts by recency. */
+    val sessionSort: Flow<String> = dataStore.data.map { it[Keys.SESSION_SORT] ?: "manual" }
+
+    suspend fun setSessionSort(value: String) {
+        dataStore.edit { it[Keys.SESSION_SORT] = value }
+    }
+
     suspend fun addKnownPort(port: Int) {
         val s = settingsOnce()
         val ports = (s.knownPorts + port).distinct().take(8)
@@ -117,5 +154,10 @@ class HostsStore @Inject constructor(
 
     private suspend fun persist(list: List<HostConfig>) {
         dataStore.edit { it[Keys.HOSTS] = WireJson.encodeToString(hostsSerializer, list) }
+    }
+
+    private companion object {
+        /** Bound on the remembered-session map, matching the known-port cap. */
+        const val MAX_REMEMBERED_HOSTS = 8
     }
 }

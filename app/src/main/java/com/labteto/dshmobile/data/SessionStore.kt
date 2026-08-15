@@ -13,9 +13,15 @@ import com.labteto.dshmobile.core.wire.DshApiClient
 import com.labteto.dshmobile.core.wire.RpcResult
 import com.labteto.dshmobile.core.wire.ServerRequest
 import com.labteto.dshmobile.core.wire.decodeFromJsonElement
+import com.labteto.dshmobile.core.wire.dto.AgentPresetListValue
+import com.labteto.dshmobile.core.wire.dto.AgentPresetSelectRequest
 import com.labteto.dshmobile.core.wire.dto.AskUserQuestionIntent
 import com.labteto.dshmobile.core.wire.dto.AskUserQuestionItem
+import com.labteto.dshmobile.core.wire.dto.CUSTOM_PRESET
+import com.labteto.dshmobile.core.wire.dto.CommandDescriptor
 import com.labteto.dshmobile.core.wire.dto.ContentBlock
+import com.labteto.dshmobile.core.wire.dto.ContextBreakdownView
+import com.labteto.dshmobile.core.wire.dto.ContextPressureView
 import com.labteto.dshmobile.core.wire.dto.GoalClearRequest
 import com.labteto.dshmobile.core.wire.dto.GoalCompleteRequest
 import com.labteto.dshmobile.core.wire.dto.GoalCreateRequest
@@ -25,9 +31,13 @@ import com.labteto.dshmobile.core.wire.dto.GoalRef
 import com.labteto.dshmobile.core.wire.dto.GoalResumeRequest
 import com.labteto.dshmobile.core.wire.dto.GoalSnapshot
 import com.labteto.dshmobile.core.wire.dto.HostDescription
+import com.labteto.dshmobile.core.wire.dto.HistoryEntry
 import com.labteto.dshmobile.core.wire.dto.HostFrame
+import com.labteto.dshmobile.core.wire.dto.ImageLimitsView
 import com.labteto.dshmobile.core.wire.dto.JobView
 import com.labteto.dshmobile.core.wire.dto.MuxFrame
+import com.labteto.dshmobile.core.wire.dto.PermissionSelect
+import com.labteto.dshmobile.core.wire.dto.PlanStateView
 import com.labteto.dshmobile.core.wire.dto.PromptContentPart
 import com.labteto.dshmobile.core.wire.dto.QueueAction
 import com.labteto.dshmobile.core.wire.dto.SessionAttachmentRequest
@@ -41,7 +51,9 @@ import com.labteto.dshmobile.core.wire.dto.SessionPromptRequest
 import com.labteto.dshmobile.core.wire.dto.SessionProjectionsBlock
 import com.labteto.dshmobile.core.wire.dto.SessionRenameRequest
 import com.labteto.dshmobile.core.wire.dto.SessionSelectModelRequest
+import com.labteto.dshmobile.core.wire.dto.SessionStatsView
 import com.labteto.dshmobile.core.wire.dto.SessionEvent
+import com.labteto.dshmobile.core.wire.dto.TokenUsageView
 import com.labteto.dshmobile.core.wire.dto.SessionUpdateQueueRequest
 import com.labteto.dshmobile.core.wire.dto.SkillEntry
 import com.labteto.dshmobile.core.wire.dto.SkillListRequest
@@ -59,6 +71,8 @@ import com.labteto.dshmobile.core.wire.dto.WorkspaceCreateRequest
 import com.labteto.dshmobile.core.wire.dto.WorkspaceDeleteRequest
 import com.labteto.dshmobile.core.wire.dto.WorkspaceRenameRequest
 import com.labteto.dshmobile.core.wire.dto.WorkspaceView
+import java.io.OutputStream
+import java.time.Instant
 import java.util.TimeZone
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -66,10 +80,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -100,6 +118,33 @@ data class WorkspaceRow(
     val path: String,
     val title: String,
     val sessionIds: List<String>,
+    /**
+     * `WorkspaceView.updatedAt` as epoch millis (0 when unparseable). This stamps the *registration
+     * record* — a rename or a session being added — not conversation activity, so it is only a
+     * tiebreak for recency ranking, never the primary key.
+     */
+    val updatedAtEpoch: Long = 0L,
+)
+
+/** What a slash command did, so the caller can report it without re-reading the wire. */
+sealed interface CommandOutcome {
+    /** The host executed the line; [text] is its settlement message, when it produced one. */
+    data class Ok(val text: String?) : CommandOutcome
+
+    /** The line named no registered command. */
+    data class Unknown(val line: String) : CommandOutcome
+
+    /** The command ran and reported a usage or state failure. */
+    data class Failed(val message: String) : CommandOutcome
+}
+
+/** Wire workspace -> renderable row, parsing the ISO-8601 stamp once at the boundary. */
+private fun WorkspaceView.toRow(): WorkspaceRow = WorkspaceRow(
+    workspaceId = workspaceId,
+    path = path,
+    title = title,
+    sessionIds = sessionIds,
+    updatedAtEpoch = runCatching { Instant.parse(updatedAt).toEpochMilli() }.getOrDefault(0L),
 )
 
 /** A pending sandbox/permission approval the user can answer (allow-once / reject). */
@@ -184,6 +229,46 @@ class SessionStore @Inject constructor(
     private val _pendingQuestions = MutableStateFlow<PendingQuestions?>(null)
     val pendingQuestions: StateFlow<PendingQuestions?> = _pendingQuestions.asStateFlow()
 
+    private val _commands = MutableStateFlow<List<CommandDescriptor>>(emptyList())
+    val commands: StateFlow<List<CommandDescriptor>> = _commands.asStateFlow()
+
+    /** False once the harness has told us it has no command registry; the menu degrades, not errors. */
+    private val _commandsAvailable = MutableStateFlow(true)
+    val commandsAvailable: StateFlow<Boolean> = _commandsAvailable.asStateFlow()
+
+    private val _agentPresets = MutableStateFlow<AgentPresetListValue?>(null)
+    val agentPresets: StateFlow<AgentPresetListValue?> = _agentPresets.asStateFlow()
+
+    /** The preset a switch is in flight for, cleared when the projection reports it as effective. */
+    private val _pendingPermission = MutableStateFlow<String?>(null)
+    val pendingPermission: StateFlow<String?> = _pendingPermission.asStateFlow()
+
+    // ------------------------------------------------------------------ projection views
+    // These are folds of `currentConversation.projections`, not separate fetches: the harness
+    // already pushes every one of them on `session/projection` frames and in the history tail, so
+    // deriving keeps them in lockstep with the transcript and adds no round trips. A null value
+    // means the key is absent — the harness composes no such service — and callers hide the UI.
+
+    val permissions: StateFlow<PermissionSelect?> = projectionOf(PermissionSelect.serializer(), "permissions")
+    val sessionStats: StateFlow<SessionStatsView?> = projectionOf(SessionStatsView.serializer(), "sessionStats")
+    val tokenUsage: StateFlow<TokenUsageView?> = projectionOf(TokenUsageView.serializer(), "tokenUsage")
+    val contextPressure: StateFlow<ContextPressureView?> =
+        projectionOf(ContextPressureView.serializer(), "contextPressure")
+    val contextBreakdown: StateFlow<ContextBreakdownView?> =
+        projectionOf(ContextBreakdownView.serializer(), "contextBreakdown")
+    val imageLimits: StateFlow<ImageLimitsView?> = projectionOf(ImageLimitsView.serializer(), "imageLimits")
+    val planState: StateFlow<PlanStateView?> = projectionOf(PlanStateView.serializer(), "plan")
+
+    /** One projection key, decoded leniently: unknown or malformed payloads read as absent. */
+    private fun <T> projectionOf(serializer: KSerializer<T>, key: String): StateFlow<T?> =
+        currentConversation
+            .map { conversation ->
+                conversation?.projections?.get(key)?.let { element ->
+                    runCatching { decodeFromJsonElement(serializer, element) }.getOrNull()
+                }
+            }
+            .stateIn(scope, SharingStarted.Eagerly, null)
+
     // ------------------------------------------------------------------ internal state (guarded by `lock`)
     private val sessionRows = LinkedHashMap<String, SessionRow>()
     private val runningBySession = HashMap<String, Boolean>()
@@ -218,6 +303,20 @@ class SessionStore @Inject constructor(
     init {
         observeConnection()
         observeFrames()
+        observePermissionSettlement()
+    }
+
+    /**
+     * Clear the optimistic permission value once the harness's own projection agrees with it. The
+     * chip shows the target immediately and stops pretending as soon as the truth arrives.
+     */
+    private fun observePermissionSettlement() {
+        scope.launch {
+            permissions.collect { select ->
+                val pending = _pendingPermission.value ?: return@collect
+                if (select?.currentValue == pending) _pendingPermission.value = null
+            }
+        }
     }
 
     // ------------------------------------------------------------------ connection lifecycle
@@ -259,9 +358,38 @@ class SessionStore @Inject constructor(
 
     private suspend fun baseline() {
         refreshSessions()
-        val sid = currentSessionId.value ?: return
+        // On a reconnect `currentSessionId` is already set, so the resolver only ever runs on the
+        // first connect of a process — no double-open, and reconnect keeps reopening what was open.
+        val sid = currentSessionId.value ?: resolveInitialSession() ?: return
         openSession(sid)
     }
+
+    /**
+     * Which session to land on when the app has just connected and nothing is open.
+     *
+     * Mirrors the harness's own startup policy: the session you were last in, else the most
+     * recently active workspace's newest session, else simply the newest session. Ranking is by
+     * session `updatedAt` — `workspace.updatedAt` stamps the registration record (a rename, a
+     * session being added), and `workspace.list` order is the manual display order, so neither
+     * tracks conversation activity.
+     *
+     * Returns null when there is nothing worth opening, which leaves the empty hero on screen.
+     */
+    private suspend fun resolveInitialSession(): String? {
+        val remembered = hostKey()?.let { hostsStore.lastSessionId(it) }
+        val (rows, workspaces, archivedNow) = synchronized(lock) {
+            Triple(
+                sessionRows.values.toList(),
+                workspaceOrder.mapNotNull { workspaceRows[it] },
+                archived,
+            )
+        }
+        return pickInitialSession(rows, workspaces, archivedNow, remembered)
+    }
+
+    /** `"host:port"` for the connected harness — session ids are only meaningful within one host. */
+    private fun hostKey(): String? =
+        connectionManager.state.value.host?.let { "${it.host}:${it.port}" }
 
     // ------------------------------------------------------------------ frame handlers
     private fun handleMuxFrame(frame: ServerRequest) {
@@ -297,9 +425,25 @@ class SessionStore @Inject constructor(
             is HostFrame.WorkspaceRemoved -> removeWorkspace(host.workspaceId)
             is HostFrame.WorkspaceOrderChanged -> setWorkspaceOrder(host.workspaceIds)
             is HostFrame.ArchivedSessionsChanged -> setArchived(host.archivedSessionIds)
-            is HostFrame.RemoteEvent -> Unit // forwarded host cordis event; not surfaced
+            is HostFrame.RemoteEvent -> onRemoteEvent(host.event)
             is HostFrame.StreamError -> log("host stream/error ${host.error.code}: ${host.error.message}")
             is UnknownHostFrame -> log("unknown host frame ${host.type}")
+        }
+    }
+
+    /**
+     * One allowlisted host event forwarded verbatim. Only the two that invalidate cached catalogs
+     * are acted on: a registry change, and a preset switch (which changes what an agent resolves
+     * without registering anything globally, so the registry-wide signal never fires for it).
+     */
+    private fun onRemoteEvent(event: String) {
+        when (event) {
+            "commands/change" -> scope.launch { refreshCommands() }
+            "agent-preset/selected" -> scope.launch {
+                refreshAgentPresets()
+                refreshCommands()
+            }
+            else -> Unit
         }
     }
 
@@ -478,7 +622,7 @@ class SessionStore @Inject constructor(
 
     private fun upsertWorkspace(workspace: WorkspaceView) {
         synchronized(lock) {
-            val row = WorkspaceRow(workspace.workspaceId, workspace.path, workspace.title, workspace.sessionIds)
+            val row = workspace.toRow()
             if (!workspaceRows.containsKey(workspace.workspaceId)) workspaceOrder.add(workspace.workspaceId)
             workspaceRows[workspace.workspaceId] = row
             emitWorkspacesLocked()
@@ -510,6 +654,17 @@ class SessionStore @Inject constructor(
 
     private fun setConnectionError(message: String?) {
         _connectionError.value = message
+    }
+
+    /**
+     * Drop a stale failure banner once something works again.
+     *
+     * Errors used to be set and never cleared, so one transient failure — a session that was still
+     * cold when the app opened it, say — left a red banner across the whole session for the rest of
+     * the run, long after the thing it described had resolved.
+     */
+    private fun clearConnectionError() {
+        if (_connectionError.value != null) _connectionError.value = null
     }
 
     // ------------------------------------------------------------------ open-session fold
@@ -593,6 +748,7 @@ class SessionStore @Inject constructor(
         val api = apiOrNull() ?: return
         when (val r = api.sessionList(null)) {
             is RpcResult.Ok -> {
+                clearConnectionError()
                 synchronized(lock) {
                     sessionRows.clear()
                     for (item in r.value.items) {
@@ -632,7 +788,7 @@ class SessionStore @Inject constructor(
                     workspaceRows.clear()
                     workspaceOrder.clear()
                     for (w in r.value.items) {
-                        workspaceRows[w.workspaceId] = WorkspaceRow(w.workspaceId, w.path, w.title, w.sessionIds)
+                        workspaceRows[w.workspaceId] = w.toRow()
                         workspaceOrder.add(w.workspaceId)
                     }
                     archived = r.value.archivedSessionIds.toSet()
@@ -665,13 +821,18 @@ class SessionStore @Inject constructor(
                 _subagents.value = emptyList()
                 _subagentConversation.value = null
                 _subagentMode.value = null
+                _commands.value = emptyList()
+                _pendingPermission.value = null
             }
         }
         when (val r = api.sessionHistory(SessionHistoryRequest(sessionId, null, HISTORY_PAGE_SIZE))) {
             is RpcResult.Ok -> {
-                val envelopes = ArrayList<SessionEventEnvelope>(r.value.events.size)
+                clearConnectionError()
+                val page = historyTail(r.value.events)
+                val overDelivered = r.value.events.size > page.size
+                val envelopes = ArrayList<SessionEventEnvelope>(page.size)
                 val views = HashMap<Long, ToolEventView>()
-                for (entry in r.value.events) {
+                for (entry in page) {
                     envelopes.add(sessionEventToEnvelope(entry.event))
                     entry.view?.let { views[entry.event.seq.toLong()] = it }
                 }
@@ -680,7 +841,7 @@ class SessionStore @Inject constructor(
                     currentEvents.clear()
                     currentEvents.addAll(envelopes)
                     currentEvents.sortBy { it.seq }
-                    currentHasMore = r.value.hasMore
+                    currentHasMore = r.value.hasMore || overDelivered
                     toolViewsBySeq.putAll(views)
                     _toolViews.value = toolViewsBySeq.toMap()
                     r.value.projections?.let { block ->
@@ -696,6 +857,15 @@ class SessionStore @Inject constructor(
         loadSkills(sessionId)
         loadModels(sessionId)
         refreshSubagents()
+        refreshCommands()
+        rememberLastSession(sessionId)
+    }
+
+    /** Persist the landing session for this harness; a write failure is not worth surfacing. */
+    private suspend fun rememberLastSession(sessionId: String) {
+        val key = hostKey() ?: return
+        runCatching { hostsStore.setLastSessionId(key, sessionId) }
+            .onFailure { log("could not remember last session", it) }
     }
 
     suspend fun loadOlder() {
@@ -704,9 +874,14 @@ class SessionStore @Inject constructor(
         val oldestSeq = synchronized(lock) { currentEvents.firstOrNull()?.seq }
         when (val r = api.sessionHistory(SessionHistoryRequest(sid, oldestSeq?.toInt(), HISTORY_PAGE_SIZE))) {
             is RpcResult.Ok -> {
-                val envelopes = ArrayList<SessionEventEnvelope>(r.value.events.size)
+                clearConnectionError()
+                // Same guard as the initial page, so paging backwards stays bounded instead of
+                // pulling the whole log at once.
+                val page = historyTail(r.value.events)
+                val overDelivered = r.value.events.size > page.size
+                val envelopes = ArrayList<SessionEventEnvelope>(page.size)
                 val views = HashMap<Long, ToolEventView>()
-                for (entry in r.value.events) {
+                for (entry in page) {
                     envelopes.add(sessionEventToEnvelope(entry.event))
                     entry.view?.let { views[entry.event.seq.toLong()] = it }
                 }
@@ -720,7 +895,7 @@ class SessionStore @Inject constructor(
                     }
                     views.forEach { (seq, view) -> toolViewsBySeq[seq] = view }
                     _toolViews.value = toolViewsBySeq.toMap()
-                    currentHasMore = r.value.hasMore
+                    currentHasMore = r.value.hasMore || overDelivered
                     rebuildCurrentLocked()
                 }
             }
@@ -729,6 +904,20 @@ class SessionStore @Inject constructor(
     }
 
     suspend fun createSession(cwd: String? = null, workspaceId: String? = null) {
+        // Reuse the workspace's existing blank session instead of leaving another empty one behind
+        // — the harness's own New Session does this, and it is why its list stays clean.
+        if (workspaceId != null) {
+            val reusable = synchronized(lock) {
+                workspaceRows[workspaceId]?.sessionIds
+                    ?.mapNotNull { sessionRows[it] }
+                    ?.firstOrNull { it.blank && it.sessionId !in archived && it.origin != "subagent" }
+                    ?.sessionId
+            }
+            if (reusable != null) {
+                openSession(reusable)
+                return
+            }
+        }
         val api = apiOrNull() ?: return
         when (val r = api.sessionCreate(SessionCreateRequest(workspaceId = workspaceId, cwd = cwd))) {
             is RpcResult.Ok -> {
@@ -1035,6 +1224,119 @@ class SessionStore @Inject constructor(
         }
     }
 
+    /**
+     * Reload the session's slash-command catalog.
+     *
+     * A harness with no command registry answers 404 and a LAN-refused method answers 403; neither
+     * is a connection fault, so this degrades the menu to its static fallback rather than raising a
+     * failure banner on an otherwise healthy session.
+     */
+    suspend fun refreshCommands() {
+        val sid = currentSessionId.value ?: return
+        val api = apiOrNull() ?: return
+        when (val r = api.commandsList(sid)) {
+            is RpcResult.Ok -> synchronized(lock) {
+                if (currentId == sid) {
+                    _commands.value = r.value
+                    _commandsAvailable.value = true
+                }
+            }
+            is RpcResult.Err -> {
+                _commandsAvailable.value = false
+                _commands.value = emptyList()
+                log("commands/list unavailable (${r.error.code}): ${r.error.message}")
+            }
+        }
+    }
+
+    /**
+     * Run one complete slash-command line.
+     *
+     * Goes through `session.prompt` rather than the typert remote on purpose: the host executes a
+     * prompt that is exactly one leading-slash text block through the command registry and never
+     * sends it to the model, so this write path works even against a build with no gateway.
+     */
+    suspend fun runCommand(line: String): CommandOutcome {
+        val sid = currentSessionId.value ?: return CommandOutcome.Failed("no open session")
+        val api = apiOrNull() ?: return CommandOutcome.Failed("not connected")
+        val request = SessionPromptRequest(
+            sessionId = sid,
+            mode = "queue",
+            content = listOf(PromptContentPart.Text(line)),
+            clientTimeZone = TimeZone.getDefault().id,
+        )
+        return when (val r = api.sessionPrompt(request)) {
+            is RpcResult.Ok -> CommandOutcome.Ok(r.value.command?.text)
+            is RpcResult.Err -> when (r.error.code) {
+                "unknown-command" -> CommandOutcome.Unknown(line)
+                "command-error" -> CommandOutcome.Failed(r.error.message)
+                else -> {
+                    setConnectionError(r.error.message)
+                    CommandOutcome.Failed(r.error.message)
+                }
+            }
+        }
+    }
+
+    /**
+     * Switch the session's permission preset. The read side is the `permissions` projection, so
+     * there is nothing to refresh — the harness pushes the new value back on a projection frame.
+     */
+    suspend fun setPermissionPreset(value: String): CommandOutcome {
+        if (value == CUSTOM_PRESET) {
+            return CommandOutcome.Failed("`$CUSTOM_PRESET` is a derived state, not a preset")
+        }
+        _pendingPermission.value = value
+        val outcome = runCommand("/permission $value")
+        if (outcome !is CommandOutcome.Ok) _pendingPermission.value = null
+        return outcome
+    }
+
+    /** Reload the agent-preset roster (host-scoped, so it survives session switches). */
+    suspend fun refreshAgentPresets() {
+        val api = apiOrNull() ?: return
+        when (val r = api.agentPresetList()) {
+            is RpcResult.Ok -> _agentPresets.value = r.value
+            is RpcResult.Err -> log("agentPreset.list unavailable (${r.error.code}): ${r.error.message}")
+        }
+    }
+
+    /**
+     * Pin an agent preset onto the open session. The harness only allows this while the session is
+     * blank; on a started session it answers `agent-preset-locked`, which surfaces as a normal error.
+     */
+    suspend fun selectAgentPreset(agentPreset: String): Boolean {
+        val sid = currentSessionId.value ?: return false
+        val api = apiOrNull() ?: return false
+        return when (val r = api.agentPresetSelect(AgentPresetSelectRequest(sid, agentPreset))) {
+            is RpcResult.Ok -> {
+                refreshSessions()
+                true
+            }
+            is RpcResult.Err -> {
+                setConnectionError(r.error.message)
+                false
+            }
+        }
+    }
+
+    /**
+     * Stream the open session's log ZIP into [sink]. The caller owns [sink] and should close it;
+     * the harness answers this as a plain attachment download, not an RPC.
+     */
+    suspend fun exportSessionTo(sink: OutputStream, includeDescendants: Boolean = false): Boolean {
+        val sid = currentSessionId.value ?: return false
+        val api = apiOrNull() ?: return false
+        val result = api.sessionExport(sid, includeDescendants) { _, _, body -> body.copyTo(sink) }
+        return when (result) {
+            is RpcResult.Ok -> true
+            is RpcResult.Err -> {
+                setConnectionError(result.error.message)
+                false
+            }
+        }
+    }
+
     suspend fun exportSessionUrl(): String? {
         val sid = currentSessionId.value ?: return null
         val host = connectionManager.state.value.host ?: return null
@@ -1075,6 +1377,32 @@ class SessionStore @Inject constructor(
         }
     }
 
+    /**
+     * The tail slice of a history page the host over-delivered.
+     *
+     * `maxMessages` is a bound on *messages*, and not every harness build honours it — one was
+     * observed answering a 60-message request with ~29k events (several MB), which folds slowly
+     * enough to stall the first paint. Trimming is not as simple as keeping the last N events
+     * though: a single assistant message can be hundreds of `assistant/chunk` deltas, so a fixed
+     * event count yields a page with almost nothing readable in it. This walks back until it has
+     * [HISTORY_PAGE_SIZE] actual messages, with a hard event ceiling so a pathological log still
+     * cannot stall the fold. Anything trimmed is reported as `hasMore`, which is what
+     * "Load older" is for.
+     */
+    private fun historyTail(entries: List<HistoryEntry>): List<HistoryEntry> {
+        if (entries.size <= MAX_PAGE_EVENTS) return entries
+        var messages = 0
+        var index = entries.lastIndex
+        while (index > 0 && entries.size - index < MAX_PAGE_EVENTS) {
+            if (entries[index].event.type in SURFACE_EVENT_TYPES) {
+                messages++
+                if (messages >= HISTORY_PAGE_SIZE) break
+            }
+            index--
+        }
+        return entries.subList(index.coerceAtLeast(0), entries.size)
+    }
+
     private fun subagentEntryId(entry: SubagentListEntry): String? = when (entry) {
         is SubagentListEntry.ChildOneShot -> entry.id
         is SubagentListEntry.ChildContinuable -> entry.id
@@ -1102,6 +1430,12 @@ class SessionStore @Inject constructor(
     private companion object {
         const val TAG = "SessionStore"
         const val HISTORY_PAGE_SIZE = 60
+
+        /** Ceiling on events folded per page, whatever the host sends. */
+        const val MAX_PAGE_EVENTS = 4_000
+
+        /** The event types that produce a visible message; everything else frames them. */
+        val SURFACE_EVENT_TYPES = setOf("user/message", "assistant/message", "tool/result")
 
         /** Host-side wire bound for `session.search` (SESSION_SEARCH_QUERY_MAX_CHARS). */
         const val SESSION_SEARCH_QUERY_MAX_CHARS = 500

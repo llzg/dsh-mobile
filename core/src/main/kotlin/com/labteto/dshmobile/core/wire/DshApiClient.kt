@@ -11,6 +11,7 @@ import com.labteto.dshmobile.core.wire.dto.AgentPresetRemoveRequest
 import com.labteto.dshmobile.core.wire.dto.AgentPresetRemoveValue
 import com.labteto.dshmobile.core.wire.dto.AgentPresetSelectRequest
 import com.labteto.dshmobile.core.wire.dto.AgentPresetSelectValue
+import com.labteto.dshmobile.core.wire.dto.CommandDescriptor
 import com.labteto.dshmobile.core.wire.dto.CredentialsDescribeRequest
 import com.labteto.dshmobile.core.wire.dto.CredentialsDescribeValue
 import com.labteto.dshmobile.core.wire.dto.CredentialsSetRequest
@@ -97,14 +98,22 @@ import com.labteto.dshmobile.core.wire.dto.WorkspaceInsertSessionBeforeValue
 import com.labteto.dshmobile.core.wire.dto.WorkspaceListValue
 import com.labteto.dshmobile.core.wire.dto.WorkspaceRenameRequest
 import com.labteto.dshmobile.core.wire.dto.WorkspaceRenameValue
+import java.io.IOException
+import java.io.InputStream
+import java.net.URLEncoder
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.serializer
+
+/** Percent-encode one query-string value (session ids are opaque host-minted strings). */
+private fun encodeQueryComponent(value: String): String =
+    URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
 /**
  * Typed client for the harness unary + downlink wire protocol (v0.1.0-rc.5). Every unary method
@@ -134,13 +143,30 @@ class DshApiClient(
                 is RpcResult.Err -> result
             }
         } catch (e: RpcTransportException) {
-            RpcResult.Err(RpcError("internal", e.message ?: "transport error", JsonObject(emptyMap())))
+            RpcResult.Err(transportError(e))
         } catch (e: SerializationException) {
             RpcResult.Err(RpcError("internal", "response envelope decode failed: ${e.message}", JsonObject(emptyMap())))
         } catch (e: IllegalArgumentException) {
             RpcResult.Err(RpcError("internal", e.message ?: "invalid response", JsonObject(emptyMap())))
         }
     }
+
+    /**
+     * Classify a carrier failure so callers can tell "this harness does not have that capability"
+     * apart from "the connection is broken". A 404 means no route claimed the path — an optional
+     * service is simply not composed — and a 403 is the documented loopback-only refusal. Neither
+     * is a connection fault, and reporting them as one would put a failure banner on a healthy
+     * session.
+     */
+    private fun transportError(e: RpcTransportException): RpcError = RpcError(
+        code = when (e.status) {
+            404 -> "capability-unavailable"
+            403 -> "forbidden"
+            else -> "internal"
+        },
+        message = e.message ?: "transport error",
+        details = JsonObject(emptyMap()),
+    )
 
     /** POST one unary call with a typed @Serializable request payload. */
     private suspend inline fun <reified R, reified T> call(method: String, request: R): RpcResult<T> =
@@ -388,21 +414,76 @@ class DshApiClient(
     }
 
     /**
-     * Invokes a typert "Remote" channel method: `POST /api/<namespace>/<method>` with the body
-     * `{"args": ...}`. The response is a full server-response envelope.
+     * Invokes a typert "Remote" gateway method: `POST /api/<namespace>/<method>`.
+     *
+     * The gateway shares the ordinary envelope — `{"args": …}` is the *payload*, not the body — and
+     * asserts that the envelope's `method` equals the path, so this delegates to [unary] with the
+     * slash-separated method name rather than posting a bare body. Args are a named object whose
+     * keys must match the remote descriptor exactly; a session-addressed method takes `agentId`.
      */
-    suspend fun remote(namespace: String, method: String, args: JsonElement): RpcResult<JsonElement> {
-        val body = buildJsonObject { put("args", args) }
-        return try {
-            val response = transport.post("/api/$namespace/$method", body.toString())
-            decodeServerResponse(response.body).result
-        } catch (e: RpcTransportException) {
-            RpcResult.Err(RpcError("internal", e.message ?: "transport error", JsonObject(emptyMap())))
-        } catch (e: SerializationException) {
-            RpcResult.Err(RpcError("internal", e.message ?: "decode error", JsonObject(emptyMap())))
-        } catch (e: IllegalArgumentException) {
-            RpcResult.Err(RpcError("internal", e.message ?: "invalid response", JsonObject(emptyMap())))
+    suspend fun remote(namespace: String, method: String, args: JsonElement): RpcResult<JsonElement> =
+        unary(
+            method = "$namespace/$method",
+            payload = buildJsonObject { put("args", args) },
+            value = JsonElement.serializer(),
+        )
+
+    /**
+     * commands/list — the session's slash-command catalog.
+     *
+     * Rows are decoded individually so one unfamiliar entry drops out instead of emptying the menu.
+     * A harness without a command registry answers 404, which surfaces as `capability-unavailable`.
+     */
+    suspend fun commandsList(sessionId: String): RpcResult<List<CommandDescriptor>> {
+        val args = buildJsonObject { put("agentId", JsonPrimitive(sessionId)) }
+        return when (val result = remote("commands", "list", args)) {
+            is RpcResult.Ok -> RpcResult.Ok(
+                (result.value as? JsonArray).orEmpty().mapNotNull { row ->
+                    runCatching { decodeFromJsonElement(CommandDescriptor.serializer(), row) }.getOrNull()
+                },
+            )
+            is RpcResult.Err -> result
         }
+    }
+
+    /**
+     * commands/execute — runs one complete slash-command line against the session's agent.
+     *
+     * [sessionPrompt] executes a leading-slash line the same way, so a caller that cannot reach the
+     * gateway still has a working write path.
+     */
+    suspend fun commandsExecute(sessionId: String, line: String): RpcResult<JsonElement> =
+        remote(
+            "commands",
+            "execute",
+            buildJsonObject {
+                put("agentId", JsonPrimitive(sessionId))
+                put("line", JsonPrimitive(line))
+            },
+        )
+
+    /** pluginInventory/list — the host's composed-plugin inventory (read-only). */
+    suspend fun pluginInventoryList(): RpcResult<JsonElement> =
+        remote("pluginInventory", "list", JsonObject(emptyMap()))
+
+    /**
+     * session.export — streams the session-log ZIP.
+     *
+     * This is the harness's one non-envelope read channel: a plain `GET` answered with an
+     * attachment, not an RPC. [consume] receives the live stream and must not retain it.
+     */
+    suspend fun <T> sessionExport(
+        sessionId: String,
+        includeDescendants: Boolean = false,
+        consume: (contentType: String?, contentDisposition: String?, body: InputStream) -> T,
+    ): RpcResult<T> = try {
+        val query = "sessionId=${encodeQueryComponent(sessionId)}" +
+            if (includeDescendants) "&includeDescendants=true" else ""
+        RpcResult.Ok(transport.download("/api/session.export?$query", consume))
+    } catch (e: RpcTransportException) {
+        RpcResult.Err(transportError(e))
+    } catch (e: IOException) {
+        RpcResult.Err(RpcError("internal", e.message ?: "download failed", JsonObject(emptyMap())))
     }
 
     /**

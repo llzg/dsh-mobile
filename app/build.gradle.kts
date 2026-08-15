@@ -69,6 +69,15 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    lint {
+        // The 11-language claim is only true while every base string has a translation, and the
+        // gap is invisible in review — this is the check that actually enforces it, so it is
+        // pinned rather than left to the default severity.
+        error += listOf("MissingTranslation", "ImpliedQuantity")
+        // `HardcodedText` is deliberately absent: it only inspects XML layouts, and this app has
+        // none. Compose string literals have to be caught in review.
+    }
 }
 
 dependencies {

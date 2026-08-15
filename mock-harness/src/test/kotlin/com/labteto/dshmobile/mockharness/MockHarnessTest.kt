@@ -117,6 +117,45 @@ class MockHarnessTest {
         }
     }
 
+    @Test
+    fun typertRemotePathIsRoutedUnderItsComposedMethodName() {
+        // The Remote gateway lives on a second path segment but shares the ordinary envelope, so a
+        // client that posts a bare `{"args": …}` body — as this app's helper once did — never
+        // reaches a handler at all.
+        harness.on("commands/list") { Json.parseToJsonElement("""[{"name":"plan"}]""") }
+        val body = """{"type":"client-request","rpcId":"${UUID.randomUUID()}",""" +
+            """"method":"commands/list","payload":{"args":{"agentId":"demo"}}}"""
+        val response = post("/api/commands/list", body)
+
+        assertEquals(200, response.statusCode())
+        val result = Json.parseToJsonElement(response.body()).jsonObject["result"]!!.jsonObject
+        assertTrue(result["ok"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test
+    fun sessionExportStreamsAnAttachment() {
+        harness.sessionExportBytes = "PKzip".toByteArray()
+        val request = HttpRequest.newBuilder(
+            URI.create("http://127.0.0.1:$port/api/session.export?sessionId=demo"),
+        ).GET().build()
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+
+        assertEquals(200, response.statusCode())
+        assertEquals("PKzip", response.body())
+        assertTrue(
+            response.headers().firstValue("content-disposition").orElse("")
+                .contains("dsh-session-demo.zip"),
+        )
+    }
+
+    @Test
+    fun sessionExportWithoutASessionIdIsABadRequest() {
+        val request = HttpRequest.newBuilder(
+            URI.create("http://127.0.0.1:$port/api/session.export"),
+        ).GET().build()
+        assertEquals(400, http.send(request, HttpResponse.BodyHandlers.ofString()).statusCode())
+    }
+
     private fun post(path: String, body: String, hostHeader: String? = null): HttpResponse<String> {
         val builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:$port$path"))
             .POST(HttpRequest.BodyPublishers.ofString(body))

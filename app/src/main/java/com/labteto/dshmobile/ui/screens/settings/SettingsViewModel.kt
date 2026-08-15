@@ -11,15 +11,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** App-language choices: the 11 shipped locales. */
-data class LanguageOption(val tag: String, val label: String)
+/**
+ * App-language choices: the 11 shipped locales, plus following the system.
+ *
+ * A null [tag] clears the override. Without it the picker is a one-way door — once a language is
+ * chosen there is no way back to whatever the device is set to.
+ */
+data class LanguageOption(val tag: String?, val label: String?, val labelRes: Int? = null)
 
 val LanguageOptions = listOf(
+    LanguageOption(null, null, com.labteto.dshmobile.R.string.settings_language_system),
     LanguageOption("en", "English"),
     LanguageOption("zh", "中文"),
     LanguageOption("hi", "हिन्दी"),
@@ -62,5 +69,21 @@ class SettingsViewModel @Inject constructor(
 
     fun disconnect() {
         connectionManager.disconnect()
+    }
+
+    /** Forget every remembered harness; the connect screen starts from discovery again. */
+    fun forgetHosts(onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            hostsStore.hosts.first().forEach { hostsStore.removeHost(it.id) }
+            onDone()
+        }
+    }
+
+    /** Forget which session to reopen per harness; the app lands on the newest one next time. */
+    fun clearLastSessions(onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            hostsStore.clearLastSessions()
+            onDone()
+        }
     }
 }

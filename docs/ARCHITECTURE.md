@@ -33,10 +33,20 @@ app/            Android UI
                   projections, approvals/questions, subagent catalog
   notify/       NotificationObserver — classifier → channels, dedup,
                   deep links
-  ui/           theme (exact DSH design tokens), components (buttons,
-                  disclosure rows, state dots, tool cards, markdown,
-                  overlays), screens (connect, main shell with
-                  Discord-style drawer + details panel, chat, settings)
+  media/        AttachmentImages — LruCache + BitmapFactory decoding of
+                  session attachments (no image library: the bytes arrive
+                  through session.attachment, not a URL)
+  ui/           theme (exact DSH design tokens + motion specs), components
+                  (buttons, disclosure rows, state dots, tool cards,
+                  markdown, overlays, bottom sheets, context meter),
+                  screens (connect, main shell with Discord-style drawer +
+                  details panel, chat, settings)
+
+The chat surface is split by responsibility rather than living in one file:
+ChatScreen (shell) · ChatTopBar (two-row chrome + Chat/Trajectory tabs) ·
+ChatTranscript · ChatNodeItem · ToolRowModel (verb + cwd-relative summary) ·
+Composer · Docks · TrajectoryTab · Sheet*.kt (commands, models, presets,
+subagents, permission) · ChatProjections (defensive readers).
 
 mock-harness/   Ktor implementation of the /api protocol for tests
 tools/capture/  Node recorder of real harness traffic → conformance fixtures
@@ -48,7 +58,13 @@ tools/capture/  Node recorder of real harness traffic → conformance fixtures
    WebSocket downlinks; frames fan out as SharedFlows.
 2. `SessionStore` folds session events into `ConversationSnapshot`s
    (incremental), keeps the session/workspace registry from host frames,
-   and merges queue/jobs/projection snapshots.
+   and merges queue/jobs/projection snapshots. Typed projection views
+   (permissions, stats, usage, context, image limits) are *derived* from
+   that snapshot rather than fetched, so they stay in lockstep with the
+   transcript and cost no round trips.
+2b. On first connect `baseline()` resolves a landing session
+   (`data/InitialSession.kt`): the session last opened on this harness,
+   else the most recently active one. Reconnects keep whatever was open.
 3. Screens observe `StateFlow`s and render; user actions go back through
    `SessionStore` → `DshApiClient` (`POST /api/<method>`, `/api/respond`).
 4. `NotificationObserver` classifies frames into completion events and

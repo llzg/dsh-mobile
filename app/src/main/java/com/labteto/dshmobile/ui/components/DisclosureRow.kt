@@ -1,6 +1,11 @@
 package com.labteto.dshmobile.ui.components
 
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,7 +25,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -32,11 +36,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.labteto.dshmobile.ui.theme.DsAnimations
 import com.labteto.dshmobile.ui.theme.DsColors
 import com.labteto.dshmobile.ui.theme.DsTheme
 import com.labteto.dshmobile.ui.theme.DsType
@@ -82,17 +88,31 @@ fun DisclosureRow(
                 .padding(horizontal = 4.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Crossfade(targetState = hovered, label = "leadingIcon") { isHover ->
-                when {
-                    isHover -> Icon(
-                        if (expanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = colors.labelTertiary,
-                        modifier = Modifier.size(16.dp),
+            // The chevron is always visible when the row can expand. It used to be revealed by
+            // hover, which never fires on a touchscreen — on a phone the affordance was invisible.
+            when {
+                onToggle != null -> {
+                    val rotation by animateFloatAsState(
+                        targetValue = if (expanded) 90f else 0f,
+                        animationSpec = DsAnimations.chevron,
+                        label = "chevron",
                     )
-                    icon != null -> Icon(icon, contentDescription = null, tint = colors.labelSecondary, modifier = Modifier.size(16.dp))
-                    else -> Spacer(Modifier.size(16.dp))
+                    Icon(
+                        Icons.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = if (hovered) colors.labelSecondary else colors.labelTertiary,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .graphicsLayer { rotationZ = rotation },
+                    )
                 }
+                icon != null -> Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = colors.labelSecondary,
+                    modifier = Modifier.size(16.dp),
+                )
+                else -> Spacer(Modifier.size(16.dp))
             }
             Spacer(Modifier.width(8.dp))
             val titleModifier = if (running) Modifier.shimmer(runningBrush(colors)) else Modifier
@@ -118,7 +138,15 @@ fun DisclosureRow(
                 )
             }
         }
-        if (expanded) content?.invoke()
+        // Every disclosure in the app routes through here — tool cards, compaction, workflows,
+        // archived sessions, the todo dock — so animating this one place animates all of them.
+        AnimatedVisibility(
+            visible = expanded && content != null,
+            enter = expandVertically(DsAnimations.expand) + fadeIn(DsAnimations.fade),
+            exit = shrinkVertically(DsAnimations.expand) + fadeOut(DsAnimations.fade),
+        ) {
+            Column { content?.invoke() }
+        }
     }
 }
 
