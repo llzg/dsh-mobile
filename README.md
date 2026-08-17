@@ -21,6 +21,13 @@ DSH Mobile is an **unofficial companion app** for the
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (MIT), mirroring its web GUI
 feature-for-feature in the harness's own visual language. Android only, Kotlin + Jetpack Compose.
 
+The [**wiki**](https://github.com/sorsama/deepseek-harness-mobile/wiki) is the user-facing guide:
+[getting started](https://github.com/sorsama/deepseek-harness-mobile/wiki/Getting-Started),
+[connecting](https://github.com/sorsama/deepseek-harness-mobile/wiki/Connecting),
+[troubleshooting](https://github.com/sorsama/deepseek-harness-mobile/wiki/Troubleshooting),
+a [feature tour](https://github.com/sorsama/deepseek-harness-mobile/wiki/Feature-Tour) and an
+[FAQ](https://github.com/sorsama/deepseek-harness-mobile/wiki/FAQ).
+
 ---
 
 ## Screenshots
@@ -77,6 +84,10 @@ feature-for-feature in the harness's own visual language. Android only, Kotlin +
      [`harness/README.md`](harness/README.md), restart `dsh web`, then tap **Scan network**
      in the app.
 3. Pick a session, chat, and get notified when the harness is done.
+
+If a connect attempt fails, the app names the cause; the wiki's
+[Troubleshooting](https://github.com/sorsama/deepseek-harness-mobile/wiki/Troubleshooting) page is
+keyed on that exact sentence.
 
 ## Compatibility & security
 

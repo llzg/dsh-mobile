@@ -7,7 +7,12 @@ protocol baseline and verifies the harness version from `host.describe`.
 
 | DSH Mobile | Harness version | Status |
 |---|---|---|
-| 0.1.0 | 0.1.0-rc.5 | Supported baseline |
+| 0.1.0 – 0.3.1 | 0.1.0-rc.5 | Supported baseline |
+
+Every app release so far targets the same harness baseline, so this table gains a row
+only when the harness version does. The baseline itself is one constant —
+`DshCore.PROTOCOL_BASELINE` in `core/src/main/kotlin/com/labteto/dshmobile/core/DshCore.kt`
+— and the app shows it in Settings → About next to its own version.
 
 ## Version policy
 
