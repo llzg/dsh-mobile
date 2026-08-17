@@ -50,9 +50,12 @@ one exception:
 
 ## Reporting a vulnerability
 
-Please report security issues privately to the repository maintainers
-(see the repo's Security tab / maintainer contact in README). Do not open a
-public issue for a vulnerability.
+Please report security issues privately to **sor@zyphite.com**. Do not open a
+public issue for a vulnerability. Include what an attacker can do, the steps to
+reproduce it, the app and harness versions, and how the app was connected.
+
+The harness having no authentication is the documented model above, not a
+vulnerability report worth sending. A way around the trust fence is.
 
 ## Roadmap
 

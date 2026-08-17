@@ -12,5 +12,5 @@ contact_links:
     url: https://github.com/sorsama/deepseek-harness-mobile/wiki
     about: The wiki covers install, connection, features, notifications, security and an FAQ.
   - name: Security vulnerability
-    url: https://github.com/sorsama/deepseek-harness-mobile/blob/main/docs/SECURITY.md
-    about: Report privately to the maintainers — please do not open a public issue. Note that the harness having no authentication is a known, documented property, not a vulnerability in this app.
+    url: https://github.com/sorsama/deepseek-harness-mobile/security/policy
+    about: Report privately to sor@zyphite.com — please do not open a public issue. The harness having no authentication is a known, documented property rather than a vulnerability in this app.
