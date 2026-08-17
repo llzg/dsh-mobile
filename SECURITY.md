@@ -5,8 +5,11 @@ harness to your network.
 
 ## Reporting a vulnerability
 
-Please report security vulnerabilities privately to **sor@zyphite.com** rather than opening a
-public issue.
+Two private channels, either is fine — please do not open a public issue:
+
+- **[Report a vulnerability](https://github.com/sorsama/deepseek-harness-mobile/security/advisories/new)**
+  on the Security tab, which keeps the report and the discussion private on GitHub.
+- Email **sor@zyphite.com**.
 
 Useful things to include: what an attacker can do, the steps to reproduce it, the app version and
 the harness version, and how the app was connected (LAN, `adb reverse`, or same device).

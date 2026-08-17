@@ -50,7 +50,8 @@ one exception:
 
 ## Reporting a vulnerability
 
-Please report security issues privately to **sor@zyphite.com**. Do not open a
+Report security issues privately, either through **Report a vulnerability** on
+the repository's Security tab or by email to **sor@zyphite.com**. Do not open a
 public issue for a vulnerability. Include what an attacker can do, the steps to
 reproduce it, the app and harness versions, and how the app was connected.
 
