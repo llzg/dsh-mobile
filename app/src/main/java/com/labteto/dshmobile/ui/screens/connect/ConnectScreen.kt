@@ -43,6 +43,7 @@ import com.labteto.dshmobile.ui.components.DsButtonSize
 import com.labteto.dshmobile.ui.components.DsButtonVariant
 import com.labteto.dshmobile.ui.components.DsCard
 import com.labteto.dshmobile.ui.components.DsIconButton
+import com.labteto.dshmobile.ui.components.DsPill
 import com.labteto.dshmobile.ui.components.EmptyHero
 import com.labteto.dshmobile.ui.components.FeatherIcons
 import com.labteto.dshmobile.ui.components.SectionHeader
@@ -132,14 +133,21 @@ fun ConnectScreen(onOpenSettings: () -> Unit, viewModel: ConnectViewModel = hilt
                     onAction = { viewModel.scan() },
                 )
                 val unknown = state.unknownDiscovered
-                when {
-                    state.scanning -> ScanProgressRow(state.scanProgress)
-                    unknown.isEmpty() -> Text(
-                        stringResource(R.string.connect_discovered_hint),
-                        style = DsType.std14,
-                        color = colors.labelCaption,
-                    )
-                    else -> unknown.forEach { found ->
+                // Results and progress coexist: the sweep streams, so a host found in the first
+                // batch belongs on screen while the rest of the subnet is still being knocked.
+                if (state.scanning) {
+                    ScanProgressRow(state.scanProgress) { viewModel.cancelScan() }
+                }
+                if (unknown.isEmpty()) {
+                    if (!state.scanning) {
+                        Text(
+                            stringResource(R.string.connect_discovered_hint),
+                            style = DsType.std14,
+                            color = colors.labelCaption,
+                        )
+                    }
+                } else {
+                    unknown.forEach { found ->
                         DiscoveredHarnessCard(found) { viewModel.connectDiscovered(found) }
                     }
                 }
@@ -319,15 +327,23 @@ private fun statusLine(probe: HostProbe?, version: String?, sessions: Int?): Str
     else -> stringResource(R.string.common_loading)
 }
 
+/**
+ * One sweep result.
+ *
+ * A harness whose trust fence refused us is still shown. It is the single most recoverable outcome
+ * the scan can produce — the harness is running, on the right port, one `--trusted-host` away — and
+ * reporting it as "nothing found" sends people looking for a fault that is not there.
+ */
 @Composable
 private fun DiscoveredHarnessCard(found: DiscoveredHost, onConnect: () -> Unit) {
     val colors = DsTheme.colors
-    DsCard(onClick = onConnect) {
+    val description = found.description
+    DsCard(onClick = if (description != null) onConnect else null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 FeatherIcons.Globe,
                 contentDescription = null,
-                tint = colors.accent,
+                tint = if (description != null) colors.accent else colors.warn,
                 modifier = Modifier.width(14.dp),
             )
             Spacer(Modifier.width(DsSpacing.compact))
@@ -339,24 +355,36 @@ private fun DiscoveredHarnessCard(found: DiscoveredHost, onConnect: () -> Unit) 
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            DsButton(
-                text = stringResource(R.string.connect_button),
-                onClick = onConnect,
-                variant = DsButtonVariant.Info,
-                size = DsButtonSize.Small,
+            if (description != null) {
+                DsButton(
+                    text = stringResource(R.string.connect_button),
+                    onClick = onConnect,
+                    variant = DsButtonVariant.Info,
+                    size = DsButtonSize.Small,
+                )
+            } else {
+                DsPill(text = stringResource(R.string.connect_found_untrusted), warn = true)
+            }
+        }
+        if (description != null) {
+            Text(
+                listOfNotNull(
+                    stringResource(R.string.connect_harness_version_only, description.version),
+                    basename(description.cwd).takeIf { it.isNotBlank() },
+                    stringResource(R.string.connect_sessions_short, description.attachedSessions),
+                ).joinToString(" · "),
+                style = DsType.caption11,
+                color = colors.labelTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        } else {
+            Text(
+                stringResource(R.string.connect_found_untrusted_hint),
+                style = DsType.caption11,
+                color = colors.labelTertiary,
             )
         }
-        Text(
-            listOfNotNull(
-                stringResource(R.string.connect_harness_version_only, found.version),
-                basename(found.cwd).takeIf { it.isNotBlank() },
-                stringResource(R.string.connect_sessions_short, found.description.attachedSessions),
-            ).joinToString(" · "),
-            style = DsType.caption11,
-            color = colors.labelTertiary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 
@@ -472,18 +500,27 @@ private fun ConnectFailureBlock(
 
 /** Determinate sweep feedback: a /24 takes long enough that a static label reads as a hang. */
 @Composable
-private fun ScanProgressRow(progress: ScanProgress?) {
+private fun ScanProgressRow(progress: ScanProgress?, onCancel: () -> Unit) {
     val colors = DsTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(DsSpacing.xsmall)) {
-        Text(
-            if (progress == null) {
-                stringResource(R.string.connect_scanning)
-            } else {
-                stringResource(R.string.connect_scan_progress, progress.probed, progress.total)
-            },
-            style = DsType.std14,
-            color = colors.labelTertiary,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (progress == null) {
+                    stringResource(R.string.connect_scanning)
+                } else {
+                    stringResource(R.string.connect_scan_progress, progress.probed, progress.total)
+                },
+                style = DsType.std14,
+                color = colors.labelTertiary,
+                modifier = Modifier.weight(1f),
+            )
+            DsButton(
+                text = stringResource(R.string.common_cancel),
+                onClick = onCancel,
+                variant = DsButtonVariant.Ghost,
+                size = DsButtonSize.Small,
+            )
+        }
         if (progress != null && progress.total > 0) {
             LinearProgressIndicator(
                 progress = { progress.probed.toFloat() / progress.total },

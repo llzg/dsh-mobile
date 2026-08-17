@@ -193,9 +193,7 @@ fun ChatScreen(
                 title = title,
                 running = conversation?.running == true,
                 models = models,
-                agentPresetLabel = currentSession?.agentPreset?.let { id ->
-                    agentPresets?.presets?.firstOrNull { it.id == id }?.displayName() ?: id
-                },
+                agentPresetLabel = currentSession?.agentPreset?.let { agentPresetLabel(it, agentPresets) },
                 subagentCount = subagents.size,
                 detailsOpen = detailsOpen,
                 tab = tab,

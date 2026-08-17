@@ -1,12 +1,15 @@
 package com.labteto.dshmobile.connection
 
+import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.labteto.dshmobile.DshApplication
 import com.labteto.dshmobile.core.wire.WireJson
 import com.labteto.dshmobile.core.wire.dto.HostDescription
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -21,6 +24,7 @@ import javax.inject.Singleton
 @Singleton
 class HostsStore @Inject constructor(
     private val dataStore: DataStore<Preferences>,
+    @ApplicationContext private val context: Context,
 ) {
     private object Keys {
         val HOSTS = stringPreferencesKey("hosts_json")
@@ -36,6 +40,8 @@ class HostsStore @Inject constructor(
         val PORTS = stringPreferencesKey("ports_json")
         val LAST_SESSIONS = stringPreferencesKey("last_sessions_json")
         val SESSION_SORT = stringPreferencesKey("session_sort")
+        val UPDATE_CHECK = booleanPreferencesKey("update_check")
+        val DISMISSED_UPDATE = stringPreferencesKey("dismissed_update")
     }
 
     private val hostsSerializer = ListSerializer(HostConfig.serializer())
@@ -65,6 +71,8 @@ class HostsStore @Inject constructor(
             themePreference = prefs[Keys.THEME] ?: "system",
             localeOverride = prefs[Keys.LOCALE],
             knownPorts = ports,
+            updateCheckEnabled = prefs[Keys.UPDATE_CHECK] ?: true,
+            dismissedUpdate = prefs[Keys.DISMISSED_UPDATE],
         )
     }
 
@@ -169,6 +177,11 @@ class HostsStore @Inject constructor(
         dataStore.edit { it[Keys.SESSION_SORT] = value }
     }
 
+    /** Remember that this release was declined, so it is not offered again. */
+    suspend fun setDismissedUpdate(version: String) {
+        dataStore.edit { it[Keys.DISMISSED_UPDATE] = version }
+    }
+
     suspend fun addKnownPort(port: Int) {
         val s = settingsOnce()
         val ports = (s.knownPorts + port).distinct().take(8)
@@ -177,6 +190,9 @@ class HostsStore @Inject constructor(
 
     suspend fun setSetting(transform: (AppSettings) -> AppSettings) {
         val next = transform(settingsOnce())
+        // Mirrored out to SharedPreferences as well: the scheme has to be readable before any
+        // activity exists, and DataStore cannot be read from there. See DshApplication.
+        DshApplication.storeThemePreference(context, next.themePreference)
         dataStore.edit { prefs ->
             prefs[Keys.AUTO_LAST] = next.autoConnectLast
             prefs[Keys.AUTO_LAN] = next.autoConnectLan
@@ -186,6 +202,7 @@ class HostsStore @Inject constructor(
             prefs[Keys.NOTIFY_GOAL] = next.notifyGoal
             prefs[Keys.NOTIFY_ACTION] = next.notifyNeedsAction
             prefs[Keys.THEME] = next.themePreference
+            prefs[Keys.UPDATE_CHECK] = next.updateCheckEnabled
             next.localeOverride?.let { prefs[Keys.LOCALE] = it } ?: prefs.remove(Keys.LOCALE)
         }
     }

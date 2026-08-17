@@ -7,9 +7,9 @@ import com.labteto.dshmobile.core.wire.RpcResult
 import com.labteto.dshmobile.core.wire.TransportFailure
 import com.labteto.dshmobile.core.wire.TransportFailures
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -24,6 +24,8 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.Enumeration
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,9 +49,14 @@ internal fun sameSubnet(target: String, localIps: List<String>): Boolean {
 /**
  * Finds DeepSeek Harness instances on the local Wi-Fi.
  *
- * The harness has no mDNS/health endpoint, so discovery is an active sweep:
- * the device's IPv4 subnet is scanned on the known ports and each candidate
- * must complete the [DshApiClient.hostDescribe] readiness probe.
+ * The harness advertises nothing — no mDNS, no broadcast — so discovery is an active sweep of the
+ * device's own IPv4 subnet. What keeps that affordable is asking three progressively more expensive
+ * questions in order (see [scan]): does anything accept a socket, is it a harness, and will it talk
+ * to us. Collapsing them into one `host.describe` per address, as this used to, meant every dead
+ * address on a /24 paid an HTTP timeout.
+ *
+ * Worth knowing when reading a scan that finds nothing: the harness binds `127.0.0.1` by default
+ * and refuses `--host 0.0.0.0` outright, so LAN serving is something its operator has to opt into.
  */
 @Singleton
 class DiscoveryEngine @Inject constructor(
@@ -184,42 +191,90 @@ class DiscoveryEngine @Inject constructor(
 
     /**
      * Sweep the subnet(s) of this device on [ports], probing concurrently.
-     * Returns discovered harnesses (probe failures are silently ignored).
      *
-     * [onProgress] is called after each chunk with `(probed, total)`. A /24 at 32-wide concurrency
-     * and a 2.2 s worst-case probe runs for the better part of half a minute, which is far too long
-     * to show a static "scanning…" label and nothing else.
+     * Two stages, cheap one first. A bare TCP knock rejects the ~253 addresses of a /24 that are
+     * nothing, and only the handful that open a socket pay for `host.describe`. The previous shape
+     * — a full HTTP RPC at every address, ports tried in series, and a `chunked(32).awaitAll()`
+     * barrier that made each batch cost its slowest member — ran for the better part of a minute on
+     * one port and minutes across several. This costs roughly `ceil(pairs / CONCURRENCY) × 300ms`
+     * plus a few round trips.
+     *
+     * [onProgress] reports `(probed, total)` per knock, and [onFound] fires the moment a host is
+     * confirmed rather than making the caller wait for the whole sweep — the harness people are
+     * looking for is usually the first one found.
      */
     suspend fun scan(
         ports: List<Int>,
         onProgress: (probed: Int, total: Int) -> Unit = { _, _ -> },
+        onFound: (DiscoveredHost) -> Unit = {},
     ): List<DiscoveredHost> = supervisorScope {
         val subnets = localIpv4s()
         if (subnets.isEmpty()) return@supervisorScope emptyList()
-        val candidates = subnets.flatMap { subnetCandidates(it) }.distinct()
-        val portsSafe = ports.ifEmpty { listOf(3080) }
-        val discovered = mutableListOf<DiscoveredHost>()
-        var probed = 0
-        onProgress(0, candidates.size)
+        val portsSafe = ports.ifEmpty { listOf(DEFAULT_PORT) }
+            // The default port is the overwhelmingly likely one, and stage 1 is bounded by the
+            // slowest pair in the last batch — so it belongs in the first batch, not the last.
+            .sortedBy { if (it == DEFAULT_PORT) 0 else 1 }
+        val candidates = subnets.flatMap { subnetCandidates(it) }.distinct().let(::byLikelihood)
+        val pairs = candidates.flatMap { ip -> portsSafe.map { port -> ip to port } }
 
-        // Small bounded fan-out: 32 concurrent probes, chunked over the /24.
-        candidates.chunked(32).forEach { chunk ->
-            chunk.map { ip ->
-                async {
-                    var last: DiscoveredHost? = null
-                    for (port in portsSafe) {
-                        val desc = runCatching { probe(ip, port) }.getOrNull()
-                        if (desc != null) {
-                            last = DiscoveredHost(ip, port, desc)
-                            break
-                        }
-                    }
-                    last
+        val probed = AtomicInteger(0)
+        val discovered = CopyOnWriteArrayList<DiscoveredHost>()
+        onProgress(0, pairs.size)
+
+        // Every pair gets a coroutine; [sweepDispatcher] is what decides how many are in flight.
+        // They are cheap while parked, and one bound in one place beats a thread cap and a
+        // semaphore that have to be kept in agreement.
+        pairs.map { (ip, port) ->
+            async(sweepDispatcher) {
+                // Stage 1 — knock. Everything below only runs for a socket that opened.
+                val open = runCatching { preflight(ip, port, ProbeTimeouts.Knock.connectMs) }
+                    .getOrDefault(ProbeOutcome.Timeout) == null
+                onProgress(probed.incrementAndGet(), pairs.size)
+                if (!open) return@async
+                // Stage 2 — describe. A trust-fence refusal counts as found: only a harness answers
+                // 403 to this call, so it identifies one just as well as a description does, and it
+                // is the most recoverable thing a sweep can turn up.
+                val outcome = runCatching { probeOutcome(ip, port) }
+                    .getOrDefault(ProbeOutcome.Other("probe failed"))
+                val found = when (outcome) {
+                    is ProbeOutcome.Reachable -> DiscoveredHost(ip, port, outcome.description)
+                    ProbeOutcome.TrustFence -> DiscoveredHost(ip, port, description = null)
+                    else -> return@async
                 }
-            }.awaitAll().filterNotNull().forEach { discovered.add(it) }
-            probed += chunk.size
-            onProgress(probed, candidates.size)
-        }
-        discovered
+                discovered.add(found)
+                onFound(found)
+            }
+        }.awaitAll()
+
+        // Trusted hosts first: a card you can actually connect to outranks one that needs the
+        // harness reconfigured before it will answer.
+        discovered.sortedByDescending { it.trusted }
     }
+
+    /**
+     * Sweep order: the router first, then everything else ascending.
+     *
+     * Only worth the line because [onFound] streams — a host found in the first batch is on screen
+     * while the rest of the /24 is still being knocked, and `.1` is where a self-hosted anything is
+     * most often found.
+     */
+    private fun byLikelihood(candidates: List<String>): List<String> =
+        candidates.sortedBy { if (it.endsWith(".1")) 0 else 1 }
+
+    private companion object {
+        const val DEFAULT_PORT = 3080
+
+        /**
+         * Concurrent knocks, and so the width of the sweep.
+         *
+         * Above [Dispatchers.IO]'s own 64, which is why it goes through `limitedParallelism` — that
+         * is the documented way to exceed the IO cap. A knock is almost entirely connect latency
+         * rather than work, so the number that matters is how many sockets may be waiting at once,
+         * not how many cores there are.
+         */
+        const val CONCURRENCY = 128
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val sweepDispatcher = Dispatchers.IO.limitedParallelism(CONCURRENCY)
 }

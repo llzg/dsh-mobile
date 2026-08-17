@@ -37,6 +37,7 @@ import com.labteto.dshmobile.core.wire.dto.ImageLimitsView
 import com.labteto.dshmobile.core.wire.dto.JobView
 import com.labteto.dshmobile.core.wire.dto.MuxFrame
 import com.labteto.dshmobile.core.wire.dto.PermissionSelect
+import com.labteto.dshmobile.core.wire.dto.PluginInventorySnapshot
 import com.labteto.dshmobile.core.wire.dto.PlanStateView
 import com.labteto.dshmobile.core.wire.dto.PromptContentPart
 import com.labteto.dshmobile.core.wire.dto.QueueAction
@@ -79,6 +80,8 @@ import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -87,6 +90,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -191,6 +195,9 @@ class SessionStore @Inject constructor(
     private val lock = Any()
     private val baselineMutex = Mutex()
 
+    /** Coalesces transcript rebuilds during a stream; see [observeRebuildTicks]. */
+    private val rebuildTicks = Channel<Unit>(Channel.CONFLATED)
+
     // ------------------------------------------------------------------ public StateFlows
     private val _sessions = MutableStateFlow<List<SessionRow>>(emptyList())
     val sessions: StateFlow<List<SessionRow>> = _sessions.asStateFlow()
@@ -206,6 +213,16 @@ class SessionStore @Inject constructor(
 
     private val _searchResults = MutableStateFlow<List<Pair<String, String>>>(emptyList())
     val searchResults: StateFlow<List<Pair<String, String>>> = _searchResults.asStateFlow()
+
+    private val _contentSearchAvailable = MutableStateFlow(true)
+
+    /**
+     * Whether this harness will answer `session.search`.
+     *
+     * Assumed true and latched false by the first refusal — see [search]. Reset on connect, because
+     * it is a fact about the harness on the other end, not about the app.
+     */
+    val contentSearchAvailable: StateFlow<Boolean> = _contentSearchAvailable.asStateFlow()
 
     private val _currentConversation = MutableStateFlow<ConversationSnapshot?>(null)
     val currentConversation: StateFlow<ConversationSnapshot?> = _currentConversation.asStateFlow()
@@ -266,6 +283,11 @@ class SessionStore @Inject constructor(
 
     private val _agentPresets = MutableStateFlow<AgentPresetListValue?>(null)
     val agentPresets: StateFlow<AgentPresetListValue?> = _agentPresets.asStateFlow()
+
+    private val _plugins = MutableStateFlow<PluginInventorySnapshot?>(null)
+
+    /** The host's plugin inventory, or null when this deployment does not expose one. */
+    val plugins: StateFlow<PluginInventorySnapshot?> = _plugins.asStateFlow()
 
     /** The preset a switch is in flight for, cleared when the projection reports it as effective. */
     private val _pendingPermission = MutableStateFlow<String?>(null)
@@ -332,6 +354,7 @@ class SessionStore @Inject constructor(
         observeConnection()
         observeFrames()
         observePermissionSettlement()
+        observeRebuildTicks()
     }
 
     /**
@@ -343,6 +366,30 @@ class SessionStore @Inject constructor(
             permissions.collect { select ->
                 val pending = _pendingPermission.value ?: return@collect
                 if (select?.currentValue == pending) _pendingPermission.value = null
+            }
+        }
+    }
+
+    /**
+     * Drives [rebuildCurrentLocked] for the live event stream, at most once per
+     * [REBUILD_INTERVAL_MS].
+     *
+     * A rebuild re-folds the whole transcript, so its cost is proportional to the length of the
+     * session. Running one per event made streaming quadratic: a turn arrives as a long run of
+     * `assistant/chunk` deltas, and each delta was re-folding every event before it and publishing
+     * a fresh snapshot for the transcript to recompose against. On a session of any size that
+     * allocated hundreds of megabytes a second and eventually exhausted the heap.
+     *
+     * The channel is conflated because a rebuild is idempotent and reads whatever state exists when
+     * it runs: a burst of deltas collapses into one rebuild, and no delta can be lost by it — the
+     * event is already in `currentEvents` before the tick is sent. The interval is a display frame
+     * rather than a debounce, so the tail of a stream still lands promptly.
+     */
+    private fun observeRebuildTicks() {
+        scope.launch {
+            for (tick in rebuildTicks) {
+                synchronized(lock) { rebuildCurrentLocked() }
+                delay(REBUILD_INTERVAL_MS)
             }
         }
     }
@@ -385,7 +432,13 @@ class SessionStore @Inject constructor(
     }
 
     private suspend fun baseline() {
+        // Whether content search works is a fact about the harness we just reached, so a fresh
+        // connection re-earns the answer rather than inheriting the previous host's.
+        _contentSearchAvailable.value = true
         refreshSessions()
+        // Host-scoped and needed before anything is tapped: the chat bar names the session's preset
+        // as soon as it renders, and without the roster it could only show the raw wire id.
+        refreshAgentPresets()
         // On a reconnect `currentSessionId` is already set, so the resolver only ever runs on the
         // first connect of a process — no double-open, and reconnect keeps reopening what was open.
         val sid = currentSessionId.value ?: resolveInitialSession() ?: return
@@ -696,15 +749,30 @@ class SessionStore @Inject constructor(
     }
 
     // ------------------------------------------------------------------ open-session fold
+    /**
+     * Fold one freshly-streamed event into the open session.
+     *
+     * The common case by far is a strictly-increasing append, which is why it is checked first:
+     * the scan-and-sort below is O(n log n) and used to run for every delta of every turn. Out of
+     * order or repeated sequence numbers still take the slow path, which is what makes a
+     * re-delivery after a reconnect land in the right place.
+     *
+     * The rebuild is requested rather than performed — see [observeRebuildTicks].
+     */
     private fun appendCurrentEventLocked(envelope: SessionEventEnvelope) {
-        val idx = currentEvents.indexOfFirst { it.seq == envelope.seq }
-        if (idx >= 0) {
-            currentEvents[idx] = envelope
-        } else {
+        val lastSeq = currentEvents.lastOrNull()?.seq
+        if (lastSeq == null || envelope.seq > lastSeq) {
             currentEvents.add(envelope)
-            currentEvents.sortBy { it.seq }
+        } else {
+            val idx = currentEvents.indexOfFirst { it.seq == envelope.seq }
+            if (idx >= 0) {
+                currentEvents[idx] = envelope
+            } else {
+                currentEvents.add(envelope)
+                currentEvents.sortBy { it.seq }
+            }
         }
-        rebuildCurrentLocked()
+        rebuildTicks.trySend(Unit)
     }
 
     private fun mergeProjectionLocked(key: String, seq: Int, value: JsonElement) {
@@ -828,8 +896,8 @@ class SessionStore @Inject constructor(
         }
     }
 
-    suspend fun openSession(sessionId: String) {
-        val api = apiOrNull() ?: return
+    suspend fun openSession(sessionId: String) = withContext(Dispatchers.Default) {
+        val api = apiOrNull() ?: return@withContext
         _loadOlderFailed.value = false
         synchronized(lock) {
             val same = currentId == sessionId
@@ -905,10 +973,10 @@ class SessionStore @Inject constructor(
      * nothing new ends the paging rather than leaving `hasMore` set for the trigger to fire on
      * again.
      */
-    suspend fun loadOlder() {
-        val sid = currentSessionId.value ?: return
-        val api = apiOrNull() ?: return
-        if (!_loadingOlder.compareAndSet(expect = false, update = true)) return
+    suspend fun loadOlder() = withContext(Dispatchers.Default) {
+        val sid = currentSessionId.value ?: return@withContext
+        val api = apiOrNull() ?: return@withContext
+        if (!_loadingOlder.compareAndSet(expect = false, update = true)) return@withContext
         try {
             val oldestSeq = synchronized(lock) { currentEvents.firstOrNull()?.seq }
             when (val r = api.sessionHistory(SessionHistoryRequest(sid, oldestSeq?.toInt(), HISTORY_PAGE_SIZE))) {
@@ -1113,8 +1181,18 @@ class SessionStore @Inject constructor(
         }
     }
 
+    /**
+     * Full-text search across message content.
+     *
+     * This is the *optional* half of search, and most deployments do not have it: the shipped
+     * `session-query-sqlite` row is configured `openAt: never`, which keeps exact reads, titles and
+     * lineage traces working while `session.search` fails outright. So a failure here is a normal
+     * condition, not a fault — it is latched into [contentSearchAvailable], never raised as a
+     * connection error, and never retried for the life of the connection. The drawer's own title
+     * and workspace filtering is unaffected and remains the primary way to find a session, exactly
+     * as it is in the harness's web sidebar under the same configuration.
+     */
     suspend fun search(query: String) {
-        val api = apiOrNull() ?: return
         val trimmed = query.trim()
         // The host schema is query.trim().min(1).max(500); a blank or overlong query is an
         // invalid payload, so never send one — a blank query just clears the result set.
@@ -1122,10 +1200,19 @@ class SessionStore @Inject constructor(
             _searchResults.value = emptyList()
             return
         }
+        if (!_contentSearchAvailable.value) return
+        val api = apiOrNull() ?: run {
+            // Disconnected: stale hits would otherwise sit under a query that never ran.
+            _searchResults.value = emptyList()
+            return
+        }
         val bounded = trimmed.take(SESSION_SEARCH_QUERY_MAX_CHARS)
         when (val r = api.sessionSearch(bounded)) {
             is RpcResult.Ok -> _searchResults.value = r.value.items.map { it.sessionId to it.snippet }
-            is RpcResult.Err -> setConnectionError(r.error.message)
+            is RpcResult.Err -> {
+                _contentSearchAvailable.value = false
+                _searchResults.value = emptyList()
+            }
         }
     }
 
@@ -1356,6 +1443,25 @@ class SessionStore @Inject constructor(
         return outcome
     }
 
+    /**
+     * Reload the host's plugin inventory.
+     *
+     * Host-scoped and read-only — the harness offers no way to change it from here. A deployment
+     * that does not compose `@deepseek-ai/dsh-host-plugin-inventory` answers 404, which leaves the
+     * flow null and takes the settings section off the screen: absence of the capability, not a
+     * failure to report.
+     */
+    suspend fun refreshPlugins() {
+        val api = apiOrNull() ?: return
+        when (val r = api.pluginInventoryList()) {
+            is RpcResult.Ok -> _plugins.value = r.value
+            is RpcResult.Err -> {
+                _plugins.value = null
+                log("pluginInventory/list unavailable (${r.error.code}): ${r.error.message}")
+            }
+        }
+    }
+
     /** Reload the agent-preset roster (host-scoped, so it survives session switches). */
     suspend fun refreshAgentPresets() {
         val api = apiOrNull() ?: return
@@ -1480,7 +1586,7 @@ class SessionStore @Inject constructor(
         return api
     }
 
-    private inline fun <T> handleResult(result: RpcResult<T>) {
+    private fun <T> handleResult(result: RpcResult<T>) {
         when (result) {
             is RpcResult.Ok -> Unit
             is RpcResult.Err -> setConnectionError(result.error.message)
@@ -1503,5 +1609,13 @@ class SessionStore @Inject constructor(
 
         /** Host-side wire bound for `session.search` (SESSION_SEARCH_QUERY_MAX_CHARS). */
         const val SESSION_SEARCH_QUERY_MAX_CHARS = 500
+
+        /**
+         * Floor on the gap between transcript rebuilds while a turn streams.
+         *
+         * One display frame. Nothing is gained by republishing a transcript faster than it can be
+         * drawn, and the deltas of a single turn arrive far faster than that.
+         */
+        const val REBUILD_INTERVAL_MS = 50L
     }
 }

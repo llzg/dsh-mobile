@@ -2,6 +2,7 @@ package com.labteto.dshmobile.ui.screens.main
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
@@ -149,6 +150,10 @@ internal fun ChatTopBar(
  *
  * `session.models` returns `deepseek-official / deepseek-v4-pro / max`, which is not what anyone
  * calls it — the catalog's own names resolve that to `DeepSeek-V4-Pro Max`.
+ *
+ * Drawn as a filled pill rather than the harness's transparent trigger. That is not a style
+ * preference: on the web the affordance is the hover state, and a touch screen has no hover, so
+ * bare text over the transcript gave no sign the model was switchable at all.
  */
 @Composable
 private fun ModelChip(
@@ -176,9 +181,12 @@ private fun ModelChip(
     Row(
         modifier = modifier
             .widthIn(max = 240.dp)
-            .clip(DsShapes.cube)
+            .heightIn(min = 28.dp)
+            .clip(DsShapes.pillFull)
+            .background(colors.hoverSolid)
+            .border(1.dp, colors.borderL2, DsShapes.pillFull)
             .clickable(onClick = onClick)
-            .padding(horizontal = DsSpacing.small, vertical = DsSpacing.tiny),
+            .padding(horizontal = DsSpacing.compact, vertical = DsSpacing.tiny),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(DsSpacing.tiny),
     ) {
@@ -199,12 +207,13 @@ private fun ModelChip(
         Icon(
             Icons.Filled.KeyboardArrowDown,
             contentDescription = null,
-            tint = colors.labelTertiary,
+            tint = colors.labelSecondary,
             modifier = Modifier.size(14.dp),
         )
     }
 }
 
+/** The preset and subagent chips. Same reasoning as [ModelChip]: a tap target has to look like one. */
 @Composable
 private fun MetaChip(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -214,9 +223,12 @@ private fun MetaChip(
     val colors = DsTheme.colors
     Row(
         modifier = Modifier
-            .clip(DsShapes.cube)
+            .heightIn(min = 28.dp)
+            .clip(DsShapes.pillFull)
+            .background(colors.hoverSolid)
+            .border(1.dp, colors.borderL2, DsShapes.pillFull)
             .clickable(onClick = onClick)
-            .padding(horizontal = DsSpacing.small, vertical = DsSpacing.tiny),
+            .padding(horizontal = DsSpacing.compact, vertical = DsSpacing.tiny),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(DsSpacing.tiny),
     ) {
@@ -225,7 +237,7 @@ private fun MetaChip(
         Icon(
             Icons.Filled.KeyboardArrowDown,
             contentDescription = null,
-            tint = colors.labelTertiary,
+            tint = colors.labelSecondary,
             modifier = Modifier.size(12.dp),
         )
     }

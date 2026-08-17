@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The DeepSeek Harness serves plain HTTP on the local network. Cleartext is
-     required to reach it; the app only ever talks to user-entered LAN hosts.
-     See SECURITY.md for the trust model. -->
+     required to reach it. Cleartext traffic only ever goes to a LAN host the
+     user entered or picked from a scan; the one request that leaves the network
+     is the GitHub release check, which is HTTPS and can be switched off.
+     See docs/SECURITY.md for the trust model. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>

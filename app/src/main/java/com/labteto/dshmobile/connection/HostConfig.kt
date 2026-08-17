@@ -32,15 +32,20 @@ data class HostConfig(
  *
  * Carries the whole probe answer rather than two fields of it: the sweep already paid for the round
  * trip, and the card wants the session count and the default model too.
+ *
+ * [description] is null when the harness was identified by its static manifest but its trust fence
+ * refused `host.describe` from this address. That is a real find, not a miss — it is a harness with
+ * a `--trusted-host` still to add — so it is listed and explained rather than dropped.
  */
 data class DiscoveredHost(
     val host: String,
     val port: Int,
-    val description: HostDescription,
+    val description: HostDescription?,
 ) {
     val authority: String get() = "$host:$port"
-    val version: String get() = description.version
-    val cwd: String get() = description.cwd
+
+    /** Whether the harness accepted an `/api` call from this device. */
+    val trusted: Boolean get() = description != null
 }
 
 /** App-level persisted settings (DataStore). */
@@ -55,4 +60,14 @@ data class AppSettings(
     val themePreference: String = "system", // light | dark | system
     val localeOverride: String? = null, // null = system
     val knownPorts: List<Int> = listOf(3080),
+    /**
+     * Whether to ask GitHub for the latest release on start.
+     *
+     * The only request this app makes to anything other than the harness the user pointed it at,
+     * so it is worth being able to switch off — on a restricted network, or by anyone who would
+     * rather it stayed local-only.
+     */
+    val updateCheckEnabled: Boolean = true,
+    /** A release the user has already declined, so it is offered once rather than every launch. */
+    val dismissedUpdate: String? = null,
 )

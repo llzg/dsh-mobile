@@ -1,8 +1,10 @@
 package com.labteto.dshmobile.ui.screens.settings
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,18 +16,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,19 +54,29 @@ import com.labteto.dshmobile.connection.AppSettings
 import com.labteto.dshmobile.connection.ConnectionPhase
 import com.labteto.dshmobile.connection.ConnectionUiState
 import com.labteto.dshmobile.core.DshCore
+import com.labteto.dshmobile.core.wire.dto.PluginFiberPhase
+import com.labteto.dshmobile.core.wire.dto.PluginInventoryEntry
+import com.labteto.dshmobile.core.wire.dto.PluginInventorySnapshot
+import com.labteto.dshmobile.ui.components.DisclosureRow
+import com.labteto.dshmobile.ui.components.DsBottomSheet
 import com.labteto.dshmobile.ui.components.DsButton
 import com.labteto.dshmobile.ui.components.DsButtonVariant
 import com.labteto.dshmobile.ui.components.DsDialog
 import com.labteto.dshmobile.ui.components.DsIconButton
+import com.labteto.dshmobile.ui.components.DsMenu
 import com.labteto.dshmobile.ui.components.DsToastHost
+import com.labteto.dshmobile.ui.components.MenuItem
 import com.labteto.dshmobile.ui.components.SectionHeader
 import com.labteto.dshmobile.ui.components.StateDot
 import com.labteto.dshmobile.ui.components.StateDotState
+import com.labteto.dshmobile.ui.components.ToggleRow
 import com.labteto.dshmobile.ui.components.rememberDsToast
+import com.labteto.dshmobile.ui.rememberSessionStore
 import com.labteto.dshmobile.ui.theme.DsShapes
 import com.labteto.dshmobile.ui.theme.DsSpacing
 import com.labteto.dshmobile.ui.theme.DsTheme
 import com.labteto.dshmobile.ui.theme.DsType
+import java.util.Locale
 
 /**
  * App settings, grouped into cards.
@@ -70,13 +90,20 @@ import com.labteto.dshmobile.ui.theme.DsType
 fun SettingsScreen(onClose: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val settings by viewModel.state.collectAsStateWithLifecycle()
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
+    val store = rememberSessionStore()
+    val plugins by store.plugins.collectAsStateWithLifecycle()
     val colors = DsTheme.colors
     val toast = rememberDsToast()
     var showDisconnectDialog by remember { mutableStateOf(false) }
+    var pluginsOpen by remember { mutableStateOf(false) }
     BackHandler(onBack = onClose)
 
     val hostsCleared = stringResource(R.string.settings_forget_hosts_done)
     val sessionsCleared = stringResource(R.string.settings_clear_last_sessions_done)
+
+    // Fetched on open rather than kept live: the inventory only changes when the harness is
+    // restarted with a different composition, and nothing pushes that over the wire.
+    LaunchedEffect(Unit) { store.refreshPlugins() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = colors.bgBase) {
         Box {
@@ -163,6 +190,11 @@ fun SettingsScreen(onClose: () -> Unit, viewModel: SettingsViewModel = hiltViewM
                     )
                 }
 
+                // Its own card rather than an addition to the harness one above: that card's
+                // read-only banner is scoped to the facts it shows, and plugins are a different
+                // subject that happens to also be read-only.
+                plugins?.let { PluginsCard(it) { pluginsOpen = true } }
+
                 SettingsCard(stringResource(R.string.settings_data)) {
                     DsButton(
                         text = stringResource(R.string.settings_forget_hosts),
@@ -179,6 +211,13 @@ fun SettingsScreen(onClose: () -> Unit, viewModel: SettingsViewModel = hiltViewM
                 }
 
                 SettingsCard(stringResource(R.string.settings_about)) {
+                    // Beside the version, because that is what it is about — and off-switchable,
+                    // since it is the one request this app makes to anything but the harness.
+                    ToggleRow(
+                        stringResource(R.string.settings_update_check),
+                        settings.updateCheckEnabled,
+                        stringResource(R.string.settings_update_check_hint),
+                    ) { viewModel.set { it.copy(updateCheckEnabled = !it.updateCheckEnabled) } }
                     Text(
                         stringResource(
                             R.string.settings_about_version,
@@ -194,6 +233,10 @@ fun SettingsScreen(onClose: () -> Unit, viewModel: SettingsViewModel = hiltViewM
             }
             DsToastHost(toast, modifier = Modifier.fillMaxWidth())
         }
+    }
+
+    plugins?.takeIf { pluginsOpen }?.let {
+        PluginsSheet(inventory = it, onDismiss = { pluginsOpen = false })
     }
 
     if (showDisconnectDialog) {
@@ -244,6 +287,182 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
             content()
         }
     }
+}
+
+/**
+ * The host's composed plugins, as one row that opens the list.
+ *
+ * A stock web composition mounts around forty of them. Inlined into a page that already scrolls,
+ * that buries everything below it and gives the list no room of its own; the count is the part
+ * worth seeing without asking, so the card carries that and the rest lives in [PluginsSheet].
+ *
+ * Read-only, because that is all the harness offers a client: `pluginInventory/list` has no
+ * counterpart that changes anything, and the `settings.*` calls behind the web UI's configurable
+ * plugin cards are loopback-pinned and answer 403 over the network. Enabling or disabling one means
+ * editing `cordis.patch.yml` on the harness computer.
+ */
+@Composable
+private fun PluginsCard(inventory: PluginInventorySnapshot, onOpen: () -> Unit) {
+    val colors = DsTheme.colors
+    SettingsCard(stringResource(R.string.settings_plugins)) {
+        if (inventory.entries.isEmpty()) {
+            Text(
+                stringResource(R.string.plugins_empty),
+                style = DsType.caption11,
+                color = colors.labelTertiary,
+            )
+            return@SettingsCard
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(DsShapes.row)
+                .clickable(onClick = onOpen)
+                .padding(vertical = DsSpacing.small),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.settings_plugins_inventory),
+                style = DsType.std14,
+                color = colors.labelSecondary,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                inventory.entries.size.toString(),
+                style = DsType.caption11,
+                color = colors.labelTertiary,
+            )
+            Spacer(Modifier.width(DsSpacing.xsmall))
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.labelTertiary,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The plugin list itself.
+ *
+ * A sheet rather than an expanding block: forty rows need their own scroll surface, and nesting one
+ * inside the settings page's scroll means the list and the page fight over the same drag. The
+ * filter sits above the scroll so it stays reachable however far down the list you are.
+ *
+ * Rows show the shortened module name, since the scope and `dsh-host-`/`dsh-client-` prefixes are
+ * the same on nearly every row and push the part that differs off the end of a phone screen.
+ */
+@Composable
+private fun PluginsSheet(inventory: PluginInventorySnapshot, onDismiss: () -> Unit) {
+    val colors = DsTheme.colors
+    var filter by remember { mutableStateOf("") }
+    val matching = remember(inventory, filter) {
+        val q = filter.trim().lowercase(Locale.ROOT)
+        if (q.isEmpty()) {
+            inventory.entries
+        } else {
+            inventory.entries.filter {
+                it.moduleName.lowercase(Locale.ROOT).contains(q) ||
+                    it.entryId.lowercase(Locale.ROOT).contains(q)
+            }
+        }
+    }
+    DsBottomSheet(
+        title = stringResource(R.string.settings_plugins),
+        subtitle = inventory.entries.size.toString(),
+        onDismiss = onDismiss,
+    ) {
+        TextField(
+            value = filter,
+            onValueChange = { filter = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(stringResource(R.string.plugins_search_hint), style = DsType.std14) },
+            singleLine = true,
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = colors.bgLayer2,
+                unfocusedContainerColor = colors.bgLayer2,
+                focusedIndicatorColor = colors.accent,
+                unfocusedIndicatorColor = colors.borderL2,
+                cursorColor = colors.accent,
+            ),
+        )
+        if (matching.isEmpty()) {
+            Text(
+                stringResource(R.string.plugins_empty),
+                style = DsType.caption11,
+                color = colors.labelTertiary,
+            )
+            return@DsBottomSheet
+        }
+        LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+            items(matching, key = { it.entryId }) { entry -> PluginRow(entry) }
+        }
+    }
+}
+
+@Composable
+private fun PluginRow(entry: PluginInventoryEntry) {
+    val colors = DsTheme.colors
+    var expanded by remember(entry.entryId) { mutableStateOf(false) }
+    DisclosureRow(
+        title = moduleShortName(entry.moduleName),
+        summary = stringResource(
+            if (entry.enabled) R.string.plugins_enabled else R.string.plugins_disabled,
+        ),
+        expanded = expanded,
+        onToggle = { expanded = !expanded },
+    ) {
+        Column(
+            modifier = Modifier.padding(start = DsSpacing.xlarge, bottom = DsSpacing.xsmall),
+            verticalArrangement = Arrangement.spacedBy(DsSpacing.tiny),
+        ) {
+            Text(entry.entryId, style = DsType.caption11, color = colors.labelCaption)
+            Text(entry.moduleName, style = DsType.caption11, color = colors.labelCaption)
+            // The mount phase only means anything for a plugin the composition asked for.
+            if (entry.enabled) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StateDot(
+                        when (entry.fiberPhase) {
+                            PluginFiberPhase.ACTIVE -> StateDotState.Done
+                            PluginFiberPhase.LOADING, PluginFiberPhase.UNLOADING -> StateDotState.Running
+                            PluginFiberPhase.FAILED -> StateDotState.Error
+                            PluginFiberPhase.PENDING, null -> StateDotState.Idle
+                        },
+                    )
+                    Spacer(Modifier.width(DsSpacing.xsmall))
+                    Text(
+                        stringResource(pluginPhaseLabel(entry.fiberPhase)),
+                        style = DsType.caption11,
+                        color = colors.labelTertiary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@StringRes
+private fun pluginPhaseLabel(phase: PluginFiberPhase?): Int = when (phase) {
+    PluginFiberPhase.PENDING -> R.string.plugins_phase_pending
+    PluginFiberPhase.LOADING -> R.string.plugins_phase_loading
+    PluginFiberPhase.ACTIVE -> R.string.plugins_phase_active
+    PluginFiberPhase.FAILED -> R.string.plugins_phase_failed
+    PluginFiberPhase.UNLOADING -> R.string.plugins_phase_unloading
+    null -> R.string.plugins_phase_unmounted
+}
+
+/**
+ * `@deepseek-ai/dsh-client-ui-plan` → `ui-plan`.
+ *
+ * Ported from the harness's own `moduleShortName`, prefix for prefix, so the two lists name the
+ * same plugin the same way.
+ */
+private fun moduleShortName(moduleName: String): String {
+    val prefixes = listOf("cordis:", "cordis-plugin-", "dsh-host-", "dsh-client-", "dsh-")
+    var name = moduleName.substringAfterLast('/')
+    for (prefix in prefixes) name = name.removePrefix(prefix)
+    return name.ifBlank { moduleName }
 }
 
 @Composable
@@ -312,74 +531,59 @@ private fun ConnectionSection(connectionState: ConnectionUiState, onDisconnect: 
 }
 
 @Composable
-private fun ToggleRow(label: String, checked: Boolean, hint: String? = null, onChange: () -> Unit) {
-    val colors = DsTheme.colors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(DsShapes.row)
-            .clickable(onClick = onChange)
-            .padding(vertical = DsSpacing.small),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = DsType.std14, color = colors.labelSecondary)
-            if (hint != null) {
-                Text(hint, style = DsType.caption11, color = colors.labelCaption)
-            }
-        }
-        Switch(checked = checked, onCheckedChange = { onChange() })
-    }
-}
-
-@Composable
 private fun LanguageRow(settings: AppSettings, onSelect: (String?) -> Unit) {
     val colors = DsTheme.colors
-    Column(modifier = Modifier.padding(vertical = DsSpacing.small)) {
+    // A dropdown, not a grid of twelve cells. The grid spent four rows of a settings page on a
+    // choice that is made once and then never touched, and at three per row the longer endonyms had
+    // to be ellipsised to fit — so the control was both the largest thing on the screen and unable
+    // to spell out its own options.
+    val labels = LanguageOptions.associateWith { option ->
+        option.label ?: option.labelRes?.let { stringResource(it) }.orEmpty()
+    }
+    val current = LanguageOptions.firstOrNull { it.tag == settings.localeOverride }
+        ?: LanguageOptions.first()
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = DsSpacing.small),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             stringResource(R.string.settings_language),
             style = DsType.std14,
             color = colors.labelSecondary,
+            modifier = Modifier.weight(1f),
         )
-        Spacer(Modifier.height(DsSpacing.small))
-        LanguageOptions.chunked(3).forEach { row ->
-            Row(modifier = Modifier.fillMaxWidth()) {
-                row.forEach { option ->
-                    val selected = settings.localeOverride == option.tag
-                    val label = option.label ?: option.labelRes?.let { stringResource(it) }.orEmpty()
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = DsSpacing.xsmall, bottom = DsSpacing.xsmall)
-                            .clip(DsShapes.block)
-                            .background(if (selected) colors.accentTertiary else colors.bgModulePlatform)
-                            .clickable { onSelect(option.tag) }
-                            .padding(horizontal = 10.dp, vertical = DsSpacing.small),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                label,
-                                style = DsType.small13,
-                                color = if (selected) colors.accent else colors.labelSecondary,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (selected) {
-                                Icon(
-                                    Icons.Filled.Check,
-                                    contentDescription = null,
-                                    tint = colors.accent,
-                                    modifier = Modifier.size(14.dp),
-                                )
-                            }
-                        }
-                    }
+        DsMenu(
+            anchor = {
+                Row(
+                    modifier = Modifier
+                        .clip(DsShapes.pillFull)
+                        .background(colors.hoverSolid)
+                        .border(1.dp, colors.borderL2, DsShapes.pillFull)
+                        .padding(horizontal = DsSpacing.compact, vertical = DsSpacing.tiny),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(DsSpacing.tiny),
+                ) {
+                    Text(
+                        labels[current].orEmpty(),
+                        style = DsType.small13,
+                        color = colors.labelPrimary,
+                        maxLines = 1,
+                    )
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = colors.labelSecondary,
+                        modifier = Modifier.size(14.dp),
+                    )
                 }
-                // Keep the last partial row's cells the same width as a full one.
-                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
+            },
+            items = LanguageOptions.map { option ->
+                MenuItem(
+                    text = labels[option].orEmpty(),
+                    icon = Icons.Filled.Check.takeIf { option.tag == settings.localeOverride },
+                ) { onSelect(option.tag) }
+            },
+        )
     }
 }
 

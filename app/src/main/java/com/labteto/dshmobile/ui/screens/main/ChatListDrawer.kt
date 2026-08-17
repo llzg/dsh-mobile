@@ -24,8 +24,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapVert
@@ -58,11 +58,14 @@ import com.labteto.dshmobile.ui.components.DsButtonVariant
 import com.labteto.dshmobile.ui.components.DsDialog
 import com.labteto.dshmobile.ui.components.DsIconButton
 import com.labteto.dshmobile.ui.components.DsPill
+import com.labteto.dshmobile.ui.components.DsMenu
 import com.labteto.dshmobile.ui.components.EmptyHero
+import com.labteto.dshmobile.ui.components.MenuItem
 import com.labteto.dshmobile.ui.components.SectionHeader
 import com.labteto.dshmobile.ui.components.StateDot
 import com.labteto.dshmobile.ui.components.StateDotState
 import com.labteto.dshmobile.ui.components.relativeTime
+import com.labteto.dshmobile.ui.rememberHostsStore
 import com.labteto.dshmobile.ui.rememberSessionStore
 import com.labteto.dshmobile.ui.theme.DsAnimations
 import com.labteto.dshmobile.ui.theme.DsShapes
@@ -72,6 +75,12 @@ import com.labteto.dshmobile.ui.theme.DsType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/** [com.labteto.dshmobile.connection.HostsStore.sessionSort]: the workspace's own row order. */
+private const val SORT_MANUAL = "manual"
+
+/** [com.labteto.dshmobile.connection.HostsStore.sessionSort]: most recently updated first. */
+private const val SORT_UPDATED = "updated"
 
 /**
  * The chat history: workspaces, their sessions, and search.
@@ -88,17 +97,22 @@ fun ChatListDrawer(
     val colors = DsTheme.colors
     val store = rememberSessionStore()
     val scope = rememberCoroutineScope()
+    val hostsStore = rememberHostsStore()
 
     val sessions by store.sessions.collectAsStateWithLifecycle()
     val workspaces by store.workspaces.collectAsStateWithLifecycle()
     val archivedIds by store.archivedSessionIds.collectAsStateWithLifecycle()
     val searchResults by store.searchResults.collectAsStateWithLifecycle()
+    val contentSearchAvailable by store.contentSearchAvailable.collectAsStateWithLifecycle()
     val currentSessionId by store.currentSessionId.collectAsStateWithLifecycle()
     val hostInfo by store.hostInfo.collectAsStateWithLifecycle()
 
     var query by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
-    var sortByRecency by remember { mutableStateOf(false) }
+    // Persisted, not remembered: the order you read your sessions in is a preference, and it used
+    // to reset every time the drawer was closed.
+    val sessionSort by hostsStore.sessionSort.collectAsStateWithLifecycle(initialValue = SORT_MANUAL)
+    val sortByRecency = sessionSort == SORT_UPDATED
     var newWorkspaceOpen by remember { mutableStateOf(false) }
     var newSessionOpen by remember { mutableStateOf(false) }
     val collapsed = remember { mutableStateMapOf<String, Boolean>() }
@@ -108,20 +122,65 @@ fun ChatListDrawer(
         store.search(query.trim())
     }
 
+    // Local matching is not debounced: it is a string comparison over a list already in memory, and
+    // making someone wait a quarter second for it is what made search feel like it did nothing.
+    val searchHits = remember(sessions, workspaces, archivedIds, query, searchResults) {
+        deriveSearchResults(
+            sessions = sessions,
+            workspaces = workspaces,
+            archivedIds = archivedIds,
+            query = query,
+            contentHits = searchResults,
+        )
+    }
+
     // Blank sessions are scratch space the harness reuses; subagent transcripts belong under their
     // parent, not as top-level rows.
     val listable = sessions.filter { it.sessionId !in archivedIds && !it.blank }
     val sessionsById = sessions.associateBy { it.sessionId }
     val archivedSessions = sessions.filter { it.sessionId in archivedIds }
-    val workspaceOfSessionId = workspaces
-        .flatMap { ws -> ws.sessionIds.map { it to ws.workspaceId } }
-        .toMap()
-    val subagentsByWorkspace: Map<String, List<SessionRow>> = listable
-        .filter { it.origin == "subagent" && it.parentSessionId != null }
-        .mapNotNull { child -> workspaceOf(child, sessionsById, workspaceOfSessionId)?.let { it to child } }
-        .groupBy({ it.first }, { it.second })
-    val groupedSubagentIds = subagentsByWorkspace.values.flatten().mapTo(HashSet()) { it.sessionId }
     val workspaceSessionIds = workspaces.flatMap { it.sessionIds }.toSet()
+
+    // Subagents nest under the session that spawned them. `origin` is the discriminator, not
+    // `parentSessionId` — an ordinary fork sets a parent too, and a fork is a session in its own
+    // right that belongs at the top level. Grouping is by *immediate* parent so a subagent that
+    // spawned its own subagents nests to whatever depth the run actually reached; a child whose
+    // parent is archived or blank attaches to the nearest ancestor still on screen instead of
+    // disappearing with it.
+    val childrenByParent = remember(listable) { indexSubagents(listable, sessionsById) }
+    val nestedIds = remember(childrenByParent) {
+        childrenByParent.values.flatten().mapTo(HashSet()) { it.sessionId }
+    }
+    // Every session between the open one and the root, so a subtree holding it opens by default.
+    val openPath = remember(currentSessionId, sessionsById) {
+        buildSet {
+            var cursor = currentSessionId?.let { sessionsById[it] }
+            while (cursor != null && add(cursor.sessionId)) {
+                cursor = cursor.parentSessionId?.let { sessionsById[it] }
+            }
+        }
+    }
+
+    // `collapsed` holds explicit choices only; the default is closed unless the subtree holds the
+    // session you are looking at, so opening the drawer mid-run shows you where you are.
+    fun isExpanded(sessionId: String): Boolean = collapsed[sessionId]?.not() ?: (sessionId in openPath)
+    fun toggleChildren(sessionId: String) {
+        collapsed[sessionId] = isExpanded(sessionId)
+    }
+
+    /** Depth-first expansion of one top-level session, honouring each row's collapse state. */
+    fun subtree(root: SessionRow): List<Pair<SessionRow, Int>> {
+        val out = mutableListOf<Pair<SessionRow, Int>>()
+        fun walk(row: SessionRow, depth: Int) {
+            out += row to depth
+            val children = childrenByParent[row.sessionId].orEmpty()
+            if (children.isEmpty() || !isExpanded(row.sessionId)) return
+            val ordered = if (sortByRecency) children.sortedByDescending(SessionRow::updatedAt) else children
+            ordered.forEach { walk(it, depth + 1) }
+        }
+        walk(root, 0)
+        return out
+    }
 
     Column(
         modifier = Modifier
@@ -143,15 +202,17 @@ fun ChatListDrawer(
             DsIconButton(
                 icon = Icons.Filled.Search,
                 contentDescription = stringResource(R.string.common_search),
-                onClick = { searchOpen = !searchOpen },
+                // Closing the field clears the query too: a hidden field holding text left the list
+                // filtered by something no longer on screen.
+                onClick = {
+                    searchOpen = !searchOpen
+                    if (!searchOpen) query = ""
+                },
                 tint = if (searchOpen) colors.accent else colors.labelTertiary,
             )
-            DsIconButton(
-                icon = Icons.Filled.SwapVert,
-                contentDescription = stringResource(R.string.chatlist_sort_title),
-                onClick = { sortByRecency = !sortByRecency },
-                tint = if (sortByRecency) colors.accent else colors.labelTertiary,
-            )
+            SortChip(sortByRecency) { next ->
+                scope.launch { hostsStore.setSessionSort(if (next) SORT_UPDATED else SORT_MANUAL) }
+            }
             DsIconButton(
                 icon = Icons.Filled.Settings,
                 contentDescription = stringResource(R.string.settings_title),
@@ -171,47 +232,79 @@ fun ChatListDrawer(
         // The search field folds away rather than permanently occupying a row of a phone-height
         // drawer, which is otherwise pure overhead for the common case.
         AnimatedVisibility(visible = searchOpen) {
-            TextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = DsSpacing.small),
-                placeholder = { Text(stringResource(R.string.chatlist_search_hint), style = DsType.std14) },
-                singleLine = true,
-                colors = dialogTextFieldColors(),
-            )
+            Column(modifier = Modifier.padding(top = DsSpacing.small)) {
+                TextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text(stringResource(R.string.chatlist_search_hint), style = DsType.std14) },
+                    singleLine = true,
+                    colors = dialogTextFieldColors(),
+                )
+                // Stated once, quietly, and only while searching. Most harnesses ship with the
+                // content index off, so this is a normal capability note — not a failure.
+                if (!contentSearchAvailable && query.isNotBlank()) {
+                    Text(
+                        stringResource(R.string.chatlist_search_content_off),
+                        style = DsType.caption11,
+                        color = colors.labelCaption,
+                        modifier = Modifier.padding(top = DsSpacing.tiny),
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.height(DsSpacing.small))
 
         LazyColumn(modifier = Modifier.weight(1f)) {
-            if (query.isNotBlank() && searchResults.isNotEmpty()) {
+            if (query.isNotBlank()) {
                 item(key = "search-header") { SectionHeader(stringResource(R.string.common_search)) }
-                items(searchResults, key = { it.first }) { (sessionId, snippet) ->
-                    SearchResultRow(sessionId, snippet, store, scope, onClose)
+                if (searchHits.items.isEmpty()) {
+                    item(key = "search-empty") {
+                        Text(
+                            stringResource(R.string.chatlist_search_empty),
+                            style = DsType.std14,
+                            color = colors.labelTertiary,
+                            modifier = Modifier.padding(vertical = DsSpacing.small),
+                        )
+                    }
+                }
+                items(searchHits.items, key = { it.session.sessionId }) { hit ->
+                    SearchResultRow(hit, store, scope, onClose)
+                }
+                if (searchHits.hasMore) {
+                    item(key = "search-more") {
+                        Text(
+                            stringResource(R.string.chatlist_search_refine),
+                            style = DsType.caption11,
+                            color = colors.labelCaption,
+                            modifier = Modifier.padding(vertical = DsSpacing.xsmall),
+                        )
+                    }
                 }
                 return@LazyColumn
             }
 
             var anyShown = false
             for (workspace in workspaces) {
-                val rows = workspace.sessionIds
+                val roots = workspace.sessionIds
                     .mapNotNull { id -> listable.firstOrNull { it.sessionId == id } }
+                    .filterNot { it.sessionId in nestedIds }
                     .let { if (sortByRecency) it.sortedByDescending(SessionRow::updatedAt) else it }
-                val subagents = subagentsByWorkspace[workspace.workspaceId].orEmpty()
-                if (rows.isEmpty() && subagents.isEmpty()) continue
+                if (roots.isEmpty()) continue
                 anyShown = true
                 // Only the workspace you are working in is open by default. With twenty sessions
                 // and their subagents in one group, expanding everything buries the list you came
                 // for; the explicit map entry then remembers whatever you choose.
-                val holdsCurrent = rows.any { it.sessionId == currentSessionId }
+                val holdsCurrent = roots.any { it.sessionId in openPath }
                 val isCollapsed = collapsed[workspace.workspaceId] ?: !holdsCurrent
                 item(key = "ws-${workspace.workspaceId}") {
                     WorkspaceHeader(
                         workspace = workspace,
                         collapsed = isCollapsed,
-                        sessionCount = rows.size + subagents.size,
+                        // Sessions, not sessions-plus-their-subagents: a subagent count belongs on
+                        // the row that spawned them, where it says something.
+                        sessionCount = roots.size,
                         onToggle = { collapsed[workspace.workspaceId] = !isCollapsed },
                         store = store,
                         scope = scope,
@@ -224,31 +317,49 @@ fun ChatListDrawer(
                     )
                 }
                 if (!isCollapsed) {
-                    items(rows, key = { it.sessionId }) { session ->
+                    val flat = roots.flatMap { subtree(it) }
+                    items(flat, key = { it.first.sessionId }) { (session, depth) ->
                         Box(Modifier.animateItem()) {
-                            SessionRowItem(session, session.sessionId == currentSessionId, store, scope, onClose)
-                        }
-                    }
-                    if (subagents.isNotEmpty()) {
-                        item(key = "sub-${workspace.workspaceId}") {
-                            SectionHeader(stringResource(R.string.chatlist_subagents))
-                        }
-                        items(subagents, key = { it.sessionId }) { session ->
-                            SessionRowItem(session, session.sessionId == currentSessionId, store, scope, onClose)
+                            SessionRowItem(
+                                session = session,
+                                isCurrent = session.sessionId == currentSessionId,
+                                store = store,
+                                scope = scope,
+                                onClose = onClose,
+                                depth = depth,
+                                childCount = childrenByParent[session.sessionId].orEmpty().size,
+                                childrenExpanded = isExpanded(session.sessionId),
+                                onToggleChildren = { toggleChildren(session.sessionId) },
+                            )
                         }
                     }
                 }
             }
 
+            // Sessions the harness never registered in a workspace, plus any subagent whose whole
+            // ancestry is archived or blank — those have no row left to nest under.
             val ungrouped = listable.filter {
-                it.sessionId !in workspaceSessionIds && it.sessionId !in groupedSubagentIds
+                it.sessionId !in workspaceSessionIds && it.sessionId !in nestedIds
             }
             if (ungrouped.isNotEmpty()) {
                 anyShown = true
                 item(key = "sessions-header") { SectionHeader(stringResource(R.string.chatlist_sessions)) }
-                items(ungrouped, key = { it.sessionId }) { session ->
+                val flat = ungrouped
+                    .let { if (sortByRecency) it.sortedByDescending(SessionRow::updatedAt) else it }
+                    .flatMap { subtree(it) }
+                items(flat, key = { it.first.sessionId }) { (session, depth) ->
                     Box(Modifier.animateItem()) {
-                        SessionRowItem(session, session.sessionId == currentSessionId, store, scope, onClose)
+                        SessionRowItem(
+                            session = session,
+                            isCurrent = session.sessionId == currentSessionId,
+                            store = store,
+                            scope = scope,
+                            onClose = onClose,
+                            depth = depth,
+                            childCount = childrenByParent[session.sessionId].orEmpty().size,
+                            childrenExpanded = isExpanded(session.sessionId),
+                            onToggleChildren = { toggleChildren(session.sessionId) },
+                        )
                     }
                 }
             }
@@ -331,6 +442,50 @@ fun ChatListDrawer(
     }
 }
 
+/**
+ * The session-order control.
+ *
+ * It used to be a bare ⇅ icon whose only label was a content description, which told a sighted user
+ * nothing: two arrows over a chat list could as easily mean sync, move, or reorder. Naming the
+ * current order and offering the other one is the whole fix — and the strings for both modes were
+ * already translated in all eleven locales, waiting for a control to use them.
+ */
+@Composable
+private fun SortChip(byRecency: Boolean, onPick: (byRecency: Boolean) -> Unit) {
+    val colors = DsTheme.colors
+    val updated = stringResource(R.string.chatlist_sort_updated)
+    val manual = stringResource(R.string.chatlist_sort_manual)
+    DsMenu(
+        anchor = {
+            Row(
+                modifier = Modifier
+                    .clip(DsShapes.cube)
+                    .padding(horizontal = DsSpacing.xsmall, vertical = DsSpacing.tiny),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(DsSpacing.tiny),
+            ) {
+                Icon(
+                    Icons.Filled.SwapVert,
+                    contentDescription = stringResource(R.string.chatlist_sort_title),
+                    tint = colors.labelTertiary,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    if (byRecency) updated else manual,
+                    style = DsType.small13,
+                    color = colors.labelSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        items = listOf(
+            MenuItem(text = manual) { onPick(false) },
+            MenuItem(text = updated) { onPick(true) },
+        ),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Rows
 // ---------------------------------------------------------------------------
@@ -373,7 +528,7 @@ private fun WorkspaceHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                Icons.Filled.KeyboardArrowRight,
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
                 tint = colors.labelTertiary,
                 modifier = Modifier
@@ -449,7 +604,14 @@ private fun WorkspaceMenu(
     }
 }
 
-/** One session row: status, title, relative time, and the session verbs on long-press. */
+/**
+ * One session row: status, title, relative time, and the session verbs on long-press.
+ *
+ * [depth] indents the row under whatever spawned it, and a row with [childCount] subagents grows a
+ * disclosure chevron that opens them in place. Subagents used to be dumped into one flat
+ * "Subagents" heading per workspace, which said nothing about which run produced which — with a
+ * dozen of them from three sessions it was a wall of near-identical rows.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionRowItem(
@@ -458,16 +620,26 @@ private fun SessionRowItem(
     store: SessionStore,
     scope: CoroutineScope,
     onClose: () -> Unit,
+    depth: Int = 0,
+    childCount: Int = 0,
+    childrenExpanded: Boolean = false,
+    onToggleChildren: () -> Unit = {},
 ) {
     val colors = DsTheme.colors
     var menuOpen by remember { mutableStateOf(false) }
     var renameOpen by remember { mutableStateOf(false) }
     var archiveConfirmOpen by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (childrenExpanded) 90f else 0f,
+        animationSpec = DsAnimations.chevron,
+        label = "sessionChevron",
+    )
 
     Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(start = (depth * 16).dp)
                 .clip(DsShapes.row)
                 .background(if (isCurrent) colors.sidebarNavActive else androidx.compose.ui.graphics.Color.Transparent)
                 .combinedClickable(
@@ -492,6 +664,23 @@ private fun SessionRowItem(
                     .background(if (isCurrent) colors.accent else androidx.compose.ui.graphics.Color.Transparent),
             )
             Spacer(Modifier.width(DsSpacing.small))
+            // The chevron is its own tap target: opening a session and looking at what it spawned
+            // are different intentions, and conflating them means you cannot do one without the
+            // other. The spacer keeps titles aligned down a column of mixed rows.
+            if (childCount > 0) {
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = stringResource(R.string.chatlist_subagents),
+                    tint = colors.labelTertiary,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .graphicsLayer { rotationZ = chevronRotation }
+                        .clickable(onClick = onToggleChildren),
+                )
+            } else {
+                Spacer(Modifier.width(16.dp))
+            }
+            Spacer(Modifier.width(DsSpacing.tiny))
             StateDot(
                 state = when {
                     session.running -> StateDotState.Running
@@ -531,7 +720,14 @@ private fun SessionRowItem(
                 Spacer(Modifier.width(DsSpacing.xsmall))
                 DsPill(text = stringResource(R.string.chatlist_needs_action), warn = true)
             }
-            if (session.origin == "subagent") {
+            // The count replaces the old "Subagents" pill on parents: with the children indented
+            // underneath, what is worth saying is how many are down there when the row is closed.
+            if (childCount > 0) {
+                Spacer(Modifier.width(DsSpacing.xsmall))
+                DsPill(text = childCount.toString())
+            } else if (session.origin == "subagent" && depth == 0) {
+                // Only reached by an orphan — its whole ancestry is archived or blank — where the
+                // indent cannot say what the row is.
                 Spacer(Modifier.width(DsSpacing.xsmall))
                 DsPill(text = stringResource(R.string.chatlist_subagents))
             }
@@ -581,10 +777,17 @@ private fun SessionRowItem(
     }
 }
 
+/**
+ * One search result: the session's own name first, then where it lives, then the matching excerpt
+ * if the host had one.
+ *
+ * The row used to lead with the excerpt and label itself with a raw session id, which is neither
+ * something anyone searched for nor something they can recognise. A result should name the thing
+ * you are about to open.
+ */
 @Composable
 private fun SearchResultRow(
-    sessionId: String,
-    snippet: String,
+    hit: SearchHit,
     store: SessionStore,
     scope: CoroutineScope,
     onClose: () -> Unit,
@@ -596,26 +799,44 @@ private fun SearchResultRow(
             .clip(DsShapes.row)
             .clickable {
                 scope.launch {
-                    store.openSession(sessionId)
+                    store.openSession(hit.session.sessionId)
                     onClose()
                 }
             }
             .padding(horizontal = DsSpacing.tiny, vertical = DsSpacing.xsmall),
     ) {
-        Text(
-            text = snippet,
-            style = DsType.rowText,
-            color = colors.labelSecondary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = sessionId,
-            style = DsType.caption11,
-            color = colors.labelCaption,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = sessionTitle(hit.session),
+                style = DsType.rowText,
+                color = colors.labelPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (hit.session.origin == "subagent") {
+                Spacer(Modifier.width(DsSpacing.xsmall))
+                DsPill(text = stringResource(R.string.chatlist_subagents))
+            }
+        }
+        hit.workspaceLabel.takeIf { it.isNotBlank() }?.let {
+            Text(
+                text = it,
+                style = DsType.caption11,
+                color = colors.labelCaption,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        hit.snippet?.let {
+            Text(
+                text = it,
+                style = DsType.caption11,
+                color = colors.labelSecondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -691,22 +912,47 @@ private fun NewWorkspaceDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit
  * Walk a (possibly nested) subagent session's parent chain up to the session directly registered in
  * a workspace, returning that workspace id — or null for an orphan.
  */
-private fun workspaceOf(
-    session: SessionRow,
+/**
+ * Group subagent sessions under the visible session that spawned them.
+ *
+ * Keyed by immediate parent, so a subagent that spawned its own subagents nests as deeply as the
+ * run actually went. Free function so the rules that are easy to get wrong — forks staying at the
+ * top level, orphans re-attaching, cycles not hanging — can be tested without a device.
+ */
+internal fun indexSubagents(
+    listable: List<SessionRow>,
     sessionsById: Map<String, SessionRow>,
-    workspaceOfSessionId: Map<String, String>,
-): String? {
-    val visited = HashSet<String>()
-    var current: SessionRow? = session
-    while (current != null && visited.add(current.sessionId)) {
-        workspaceOfSessionId[current.sessionId]?.let { return it }
-        current = current.parentSessionId?.let { sessionsById[it] }
+): Map<String, List<SessionRow>> {
+    val listableIds = listable.mapTo(HashSet()) { it.sessionId }
+
+    /**
+     * The nearest ancestor that is actually on screen.
+     *
+     * Usually the immediate parent. The walk exists for the case that used to lose rows entirely:
+     * archiving a session, or the harness reusing a blank one, removes it from the list while its
+     * subagents remain — those attach to the next ancestor up rather than vanishing with it. The
+     * visited set guards against a lineage cycle, which would otherwise hang the drawer.
+     */
+    fun attachPoint(child: SessionRow): String? {
+        // Seeded with the child so a lineage cycle cannot walk back around and make the row its own
+        // parent — which would nest it inside itself and render nothing at all.
+        val visited = hashSetOf(child.sessionId)
+        var cursor = child.parentSessionId
+        while (cursor != null && visited.add(cursor)) {
+            if (cursor in listableIds) return cursor
+            cursor = sessionsById[cursor]?.parentSessionId
+        }
+        return null
     }
-    return null
+
+    return listable
+        .filter { it.origin == "subagent" }
+        .mapNotNull { child -> attachPoint(child)?.let { it to child } }
+        .groupBy({ it.first }, { it.second })
 }
 
 /** Display title: an explicit title, else the working directory's folder, else the id. */
-private fun sessionTitle(session: SessionRow): String {
+internal fun sessionTitle(session: SessionRow): String {
     val title = session.title?.takeIf { it.isNotBlank() }
     val folder = session.cwd?.takeIf { it.isNotBlank() }?.let { basename(it) }?.takeIf { it.isNotBlank() }
     return title ?: folder ?: session.sessionId

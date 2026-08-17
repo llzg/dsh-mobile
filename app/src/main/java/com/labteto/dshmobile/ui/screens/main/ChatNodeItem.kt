@@ -14,10 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.outlined.CallSplit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -281,7 +281,7 @@ private fun MessageActionsRow(node: AssistantMessageNode, context: ChatNodeConte
         ActionIcon(Icons.Filled.ContentCopy, stringResource(R.string.chat_copy_message)) {
             clipboard.setText(AnnotatedString(node.plainText))
         }
-        ActionIcon(Icons.Outlined.CallSplit, stringResource(R.string.chat_branch_message)) {
+        ActionIcon(Icons.AutoMirrored.Outlined.CallSplit, stringResource(R.string.chat_branch_message)) {
             context.onBranchFrom(node.seq)
         }
         ActionIcon(Icons.Filled.ThumbUp, stringResource(R.string.chat_feedback_up)) {

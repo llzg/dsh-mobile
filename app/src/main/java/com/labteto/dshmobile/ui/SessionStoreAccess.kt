@@ -3,6 +3,7 @@ package com.labteto.dshmobile.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import com.labteto.dshmobile.connection.HostsStore
 import com.labteto.dshmobile.data.SessionStore
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -21,6 +22,7 @@ import dagger.hilt.components.SingletonComponent
 @InstallIn(SingletonComponent::class)
 interface SessionStoreEntryPoint {
     fun sessionStore(): SessionStore
+    fun hostsStore(): HostsStore
 }
 
 /** Resolves the process-scoped [SessionStore] once per composition. */
@@ -29,5 +31,19 @@ internal fun rememberSessionStore(): SessionStore {
     val context = LocalContext.current.applicationContext
     return remember {
         EntryPointAccessors.fromApplication(context, SessionStoreEntryPoint::class.java).sessionStore()
+    }
+}
+
+/**
+ * Resolves the process-scoped [HostsStore] once per composition.
+ *
+ * For the handful of preferences a screen owns outright — drawer sort order, for instance — where
+ * routing through a ViewModel would add a layer that only forwards.
+ */
+@Composable
+internal fun rememberHostsStore(): HostsStore {
+    val context = LocalContext.current.applicationContext
+    return remember {
+        EntryPointAccessors.fromApplication(context, SessionStoreEntryPoint::class.java).hostsStore()
     }
 }

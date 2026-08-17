@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,25 +41,30 @@ import com.labteto.dshmobile.ui.theme.DshTheme
 import java.util.Locale
 
 /**
- * Right-aligned user message bubble (r22, userBubble fill, hairline border, max 320dp wide).
+ * Right-aligned user message bubble: r22, `userBubble` fill, hairline edge, 16/24 text.
  *
- * The fill alone cannot draw the shape: the transcript is painted on `bgBase`, which is pure white
- * in the light theme, and `userBubble` is `#EDF3FE` — a 1.06:1 ratio against it. The bubble was
- * being drawn and read as plain text. `borderL2` gives it an edge in both themes without moving off
- * the harness's own fill token.
+ * Three things carry the shape, and it needs all three. The assistant's turn is deliberately
+ * container-less — as in the harness web UI — so the bubble is the *only* thing distinguishing who
+ * said what, and it kept reading as plain text. `userBubble` now sits a step darker than the web
+ * token (see `DsLight.userBubble`), `borderL3` draws an edge that survives a bright screen, and the
+ * width cap keeps a short message a narrow pill hugging the right margin rather than a full-width
+ * band that looks like more prose.
+ *
+ * The cap mirrors the harness's `max-width: min(525px, 82%)`, which is why this measures its parent
+ * rather than hardcoding a dp: a flat 320dp was most of a phone's width and none of a tablet's.
  */
 @Composable
 fun UserBubble(text: String, modifier: Modifier = Modifier) {
     val colors = DsTheme.colors
-    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+    BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
         Text(
             text,
             style = DsType.bubbleText,
             color = colors.labelPrimary,
             modifier = Modifier
-                .widthIn(max = 320.dp)
+                .widthIn(max = minOf(525.dp, maxWidth * 0.82f))
                 .background(colors.userBubble, DsShapes.bubble)
-                .border(1.dp, colors.borderL2, DsShapes.bubble)
+                .border(1.dp, colors.borderL3, DsShapes.bubble)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         )
     }

@@ -42,6 +42,8 @@ import com.labteto.dshmobile.core.wire.dto.LlmDiscoverModelsRequest
 import com.labteto.dshmobile.core.wire.dto.LlmDiscoverModelsValue
 import com.labteto.dshmobile.core.wire.dto.LlmModelsValue
 import com.labteto.dshmobile.core.wire.dto.LlmProvidersValue
+import com.labteto.dshmobile.core.wire.dto.PluginInventoryEntry
+import com.labteto.dshmobile.core.wire.dto.PluginInventorySnapshot
 import com.labteto.dshmobile.core.wire.dto.SessionAttachmentRequest
 import com.labteto.dshmobile.core.wire.dto.SessionAttachmentValue
 import com.labteto.dshmobile.core.wire.dto.SessionCancelRequest
@@ -477,9 +479,30 @@ class DshApiClient(
             },
         )
 
-    /** pluginInventory/list — the host's composed-plugin inventory (read-only). */
-    suspend fun pluginInventoryList(): RpcResult<JsonElement> =
-        remote("pluginInventory", "list", JsonObject(emptyMap()))
+    /**
+     * pluginInventory/list — the host's composed-plugin inventory (read-only).
+     *
+     * Rows are decoded individually, as in [commandsList]: a future `fiberPhase` this build has
+     * never heard of should cost that one row, not the whole list. A deployment that does not
+     * compose the inventory plugin answers 404, which surfaces as `capability-unavailable` and is
+     * the caller's cue to hide the section rather than report a failure.
+     */
+    suspend fun pluginInventoryList(): RpcResult<PluginInventorySnapshot> =
+        when (val result = remote("pluginInventory", "list", JsonObject(emptyMap()))) {
+            is RpcResult.Ok -> {
+                val entries = (result.value as? JsonObject)?.get("entries") as? JsonArray
+                RpcResult.Ok(
+                    PluginInventorySnapshot(
+                        entries = entries.orEmpty().mapNotNull { row ->
+                            runCatching {
+                                decodeFromJsonElement(PluginInventoryEntry.serializer(), row)
+                            }.getOrNull()
+                        },
+                    ),
+                )
+            }
+            is RpcResult.Err -> result
+        }
 
     /**
      * session.export — streams the session-log ZIP.

@@ -13,7 +13,10 @@ import com.labteto.dshmobile.connection.ProbeOutcome
 import com.labteto.dshmobile.connection.ProbeTimeouts
 import com.labteto.dshmobile.core.wire.dto.HostDescription
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -105,6 +108,9 @@ class ConnectViewModel @Inject constructor(
      * previous attempt — and so a stale manager stage cannot pin the screen on "Reaching…".
      */
     private var localStage: ConnectStage? = null
+
+    /** The sweep in flight, so a second tap cannot start a rival one and Cancel has something to stop. */
+    private var scanJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -207,8 +213,7 @@ class ConnectViewModel @Inject constructor(
         }
         // 2. LAN discovery.
         if (settings.autoConnectLan) {
-            val found = discoveryEngine.scan(settings.knownPorts)
-            val first = found.firstOrNull()
+            val first = firstReachableOnLan(settings.knownPorts)
             if (first != null) {
                 val config = hostsStore.rememberHost(
                     name = hostLabel(first.host),
@@ -237,16 +242,65 @@ class ConnectViewModel @Inject constructor(
         }
     }
 
-    fun scan() {
-        if (_state.value.scanning) return
-        _state.update { it.copy(scanning = true, scanProgress = null, failure = null) }
-        viewModelScope.launch {
-            val settings = hostsStore.settingsOnce()
-            val found = discoveryEngine.scan(settings.knownPorts) { probed, total ->
-                _state.update { it.copy(scanProgress = ScanProgress(probed, total)) }
-            }
-            _state.update { it.copy(scanning = false, scanProgress = null, discovered = found) }
+    /**
+     * Sweep only until something answers, then stop.
+     *
+     * Auto-connect has no use for the rest of the subnet, so finishing the sweep before making the
+     * first attempt is latency nobody asked for. A trust-fenced host does not count — auto-connect
+     * cannot do anything with one, and stopping on it would hide a usable harness further along.
+     */
+    private suspend fun firstReachableOnLan(ports: List<Int>): DiscoveredHost? = coroutineScope {
+        val hit = CompletableDeferred<DiscoveredHost?>()
+        val sweep = launch {
+            val all = discoveryEngine.scan(ports, onFound = { found ->
+                if (found.trusted) hit.complete(found)
+            })
+            hit.complete(all.firstOrNull { it.trusted })
         }
+        val result = hit.await()
+        sweep.cancel()
+        result
+    }
+
+    /**
+     * Sweep the subnet, showing hosts as they are confirmed.
+     *
+     * Results stream rather than landing in one batch at the end: the harness someone is looking
+     * for is usually found in the first fraction of the sweep, and making them watch the remaining
+     * two hundred addresses finish before it appears is the difference between "fast" and "fast on
+     * paper". [discovered] is therefore cleared at the start and appended to, not replaced.
+     */
+    fun scan() {
+        if (scanJob?.isActive == true) return
+        _state.update {
+            it.copy(scanning = true, scanProgress = null, failure = null, discovered = emptyList())
+        }
+        scanJob = viewModelScope.launch {
+            val settings = hostsStore.settingsOnce()
+            try {
+                discoveryEngine.scan(
+                    ports = settings.knownPorts,
+                    onProgress = { probed, total ->
+                        _state.update { it.copy(scanProgress = ScanProgress(probed, total)) }
+                    },
+                    onFound = { found ->
+                        _state.update { state ->
+                            if (state.discovered.any { it.authority == found.authority }) state
+                            else state.copy(discovered = state.discovered + found)
+                        }
+                    },
+                )
+            } finally {
+                // Also the cancel path: a sweep the user stopped keeps whatever it already found.
+                _state.update { it.copy(scanning = false, scanProgress = null) }
+            }
+        }
+    }
+
+    /** Stop a sweep in flight, keeping anything it has already turned up. */
+    fun cancelScan() {
+        scanJob?.cancel()
+        scanJob = null
     }
 
     fun connectManual(host: String, port: String) {

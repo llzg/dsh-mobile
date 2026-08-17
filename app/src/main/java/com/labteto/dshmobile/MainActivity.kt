@@ -35,13 +35,21 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
 
         // Apply the persisted in-app language (11 locales, incl. Thai/RTL).
-        // Note: MainActivity must extend AppCompatActivity for this to work on
-        // Android 12 and below — AppCompat applies the stored app locales to the
-        // activity's base context (attachBaseContext) and recreates the activity
-        // on change. On Android 13+ the system LocaleManager handles it.
-        // Only set locale if it differs from current to avoid recreation loop.
+        //
+        // This only handles a *change* made while the app is running. Restoring the choice on
+        // launch is AppCompat's job, via the `autoStoreLocales` service declared in the manifest:
+        // it re-applies the stored locale in `attachBaseContext`, before anything is composed. That
+        // ordering is the point. Below API 33 the per-app locale lives on the AppCompatActivity's
+        // base context, and any window built from a context captured earlier keeps the device
+        // language — which is how bottom sheets and dialogs ended up disagreeing with the rest of
+        // the app. Setting it from here alone could never fix that; this call is deliberately after
+        // onCreate, which is where the AppCompat contract requires it.
+        //
+        // Only set the locale when it actually differs, or the recreate it triggers loops.
         lifecycleScope.launch {
             hostsStore.settings.collect { settings ->
+                applyNightMode(settings.themePreference)
+
                 val desiredLocales = settings.localeOverride?.let { tag ->
                     LocaleListCompat.forLanguageTags(tag)
                 } ?: LocaleListCompat.getEmptyLocaleList()
@@ -57,6 +65,21 @@ class MainActivity : AppCompatActivity() {
 
         setContent {
             AppRoot()
+        }
+    }
+
+    /**
+     * Keep the resource layer's scheme in step when the preference *changes* while running.
+     *
+     * [DshApplication.applyStoredNightMode] does the same thing at process start, which is where
+     * the cost is zero; this only has to catch someone tapping Light or Dark. The guard is what
+     * makes that true — without it, every settings emission would re-enter
+     * [AppCompatDelegate.setDefaultNightMode] and recreate the activity.
+     */
+    private fun applyNightMode(themePreference: String) {
+        val mode = DshApplication.nightModeFor(themePreference)
+        if (AppCompatDelegate.getDefaultNightMode() != mode) {
+            AppCompatDelegate.setDefaultNightMode(mode)
         }
     }
 }

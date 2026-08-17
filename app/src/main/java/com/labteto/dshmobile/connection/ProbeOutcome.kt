@@ -39,6 +39,15 @@ sealed interface ProbeOutcome {
 /** Connect/read budgets for a probe. */
 data class ProbeTimeouts(val connectMs: Long, val readMs: Long) {
     companion object {
+        /**
+         * The first pass of a sweep: a bare TCP connect, nothing more.
+         *
+         * On a /24 almost every address is dead or refuses instantly, and both answers arrive in
+         * well under this budget. Only the few that open a socket go on to pay for HTTP, so the
+         * deadline that decides the length of a scan is this one — not [Sweep].
+         */
+        val Knock = ProbeTimeouts(connectMs = 300, readMs = 300)
+
         /** Sweeping 254 addresses: fail fast, most of them are nothing. */
         val Sweep = ProbeTimeouts(connectMs = 700, readMs = 1_500)
 

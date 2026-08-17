@@ -28,9 +28,11 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -72,6 +74,7 @@ class MockHarness(
 
     init {
         on("host.describe") { describeValue() }
+        on("pluginInventory/list") { pluginInventoryValue() }
     }
 
     /**
@@ -274,6 +277,42 @@ class MockHarness(
             put("canOpenPath", true)
         }
         return describeTransform?.invoke(base) ?: base
+    }
+
+    /**
+     * A small but representative plugin inventory.
+     *
+     * Enough shape to exercise the settings section against the mock: a scoped host module, a
+     * client one, a `cordis:` core row whose short name is not derived from a `dsh-` prefix, and a
+     * disabled row — which the real host sends with no `fiberPhase` at all, because a plugin the
+     * composition switched off never enters the loader's lifecycle.
+     */
+    private fun pluginInventoryValue(): JsonObject = buildJsonObject {
+        putJsonArray("entries") {
+            addJsonObject {
+                put("entryId", "1")
+                put("moduleName", "@deepseek-ai/dsh-host-plugin-inventory")
+                put("enabled", true)
+                put("fiberPhase", "active")
+            }
+            addJsonObject {
+                put("entryId", "2")
+                put("moduleName", "@deepseek-ai/dsh-client-ui-plan")
+                put("enabled", true)
+                put("fiberPhase", "active")
+            }
+            addJsonObject {
+                put("entryId", "3")
+                put("moduleName", "cordis:timer")
+                put("enabled", true)
+                put("fiberPhase", "pending")
+            }
+            addJsonObject {
+                put("entryId", "4")
+                put("moduleName", "@deepseek-ai/dsh-tool-bash")
+                put("enabled", false)
+            }
+        }
     }
 
     private fun muxSubscribedHello(): String = buildJsonObject {

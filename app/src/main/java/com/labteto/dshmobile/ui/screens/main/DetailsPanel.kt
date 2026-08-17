@@ -69,7 +69,10 @@ import com.labteto.dshmobile.ui.components.DsPill
 import com.labteto.dshmobile.ui.components.DsToastHost
 import com.labteto.dshmobile.ui.components.SectionHeader
 import com.labteto.dshmobile.ui.components.StateDot
+import com.labteto.dshmobile.core.wire.dto.AgentPresetListValue
+import com.labteto.dshmobile.core.wire.dto.SessionModelsValue
 import com.labteto.dshmobile.ui.components.StateDotState
+import com.labteto.dshmobile.ui.components.ToggleRow
 import com.labteto.dshmobile.ui.components.formatDurationMs
 import com.labteto.dshmobile.ui.components.formatTokens
 import com.labteto.dshmobile.ui.components.rememberDsToast
@@ -114,7 +117,13 @@ fun DetailsPanel(
     val usage by store.tokenUsage.collectAsState()
     val breakdown by store.contextBreakdown.collectAsState()
     val pressure by store.contextPressure.collectAsState()
+    val models by store.models.collectAsState()
+    val agentPresets by store.agentPresets.collectAsState()
     val current = sessions.firstOrNull { it.sessionId == currentSessionId }
+
+    // This panel owns its own sheets rather than reaching back into ChatScreen's: it is reachable
+    // on its own on a phone, where the chat surface is not even composed behind it.
+    var sheet by remember { mutableStateOf<DetailsSheet?>(null) }
 
     val savedLabel = stringResource(R.string.chat_export_saved)
     val failedLabel = stringResource(R.string.chat_export_failed)
@@ -152,11 +161,18 @@ fun DetailsPanel(
 
                 SessionCard(
                     session = current,
+                    models = models,
+                    presets = agentPresets,
                     onRename = { title ->
                         scope.launch { currentSessionId?.let { store.renameSession(it, title) } }
                     },
                     onFork = { scope.launch { currentSessionId?.let { store.forkSession(it) } } },
                     onArchive = { scope.launch { currentSessionId?.let { store.archiveSession(it) } } },
+                    onOpenModels = { sheet = DetailsSheet.Models },
+                    onOpenPresets = {
+                        scope.launch { store.refreshAgentPresets() }
+                        sheet = DetailsSheet.Presets
+                    },
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(DsSpacing.small)) {
@@ -195,7 +211,9 @@ fun DetailsPanel(
                 } else {
                     ContextCard(breakdown, pressure, usage, stats)
                     GoalCard(conv, store)
-                    PlanCard(conv) { scope.launch { store.runCommand("/plan") } }
+                    PlanCard(conv) { next ->
+                        scope.launch { store.runCommand(if (next) "/plan" else "/plan off") }
+                    }
                     JobsCard(jobs)
                     QueueCard(conv.queue, store)
                     SubagentsCard(subagents) { id -> scope.launch { store.openSubagentTranscript(id) } }
@@ -207,7 +225,22 @@ fun DetailsPanel(
             DsToastHost(toast, modifier = Modifier.fillMaxWidth())
         }
     }
+
+    when (sheet) {
+        DetailsSheet.Models -> ModelsSheet(models = models, store = store, onDismiss = { sheet = null })
+        DetailsSheet.Presets -> PresetsSheet(
+            presets = agentPresets,
+            currentPreset = current?.agentPreset,
+            sessionBlank = current?.blank ?: false,
+            store = store,
+            onDismiss = { sheet = null },
+        )
+        null -> Unit
+    }
 }
+
+/** Which picker, if any, is open over the details panel. */
+private enum class DetailsSheet { Models, Presets }
 
 @Composable
 private fun HeaderRow(onClose: () -> Unit) {
@@ -259,9 +292,13 @@ private fun Card(
 @Composable
 private fun SessionCard(
     session: SessionRow?,
+    models: SessionModelsValue?,
+    presets: AgentPresetListValue?,
     onRename: (String) -> Unit,
     onFork: () -> Unit,
     onArchive: () -> Unit,
+    onOpenModels: () -> Unit,
+    onOpenPresets: () -> Unit,
 ) {
     val colors = DsTheme.colors
     if (session == null) return
@@ -272,7 +309,19 @@ private fun SessionCard(
         initiallyExpanded = true,
     ) {
         session.cwd?.let { Text(it, style = DsType.caption11, color = colors.labelCaption) }
-        session.agentPreset?.let { DsPill(text = it) }
+        // The model and the preset are the two things about a session people most often come here
+        // to check, and until now this panel could show only one of them and could change neither.
+        // Both pills carry an onClick, which is also what makes them look pressable.
+        Row(horizontalArrangement = Arrangement.spacedBy(DsSpacing.xsmall)) {
+            models?.let { value ->
+                val group = value.groups.firstOrNull { it.id == value.current.provider }
+                val name = group?.models?.firstOrNull { it.id == value.current.model }?.name
+                DsPill(text = name ?: value.current.model, onClick = onOpenModels)
+            }
+            session.agentPreset?.let {
+                DsPill(text = agentPresetLabel(it, presets), onClick = onOpenPresets)
+            }
+        }
         if (session.running) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StateDot(StateDotState.Running)
@@ -405,16 +454,31 @@ private fun GoalCard(conversation: ConversationSnapshot, store: com.labteto.dshm
     }
 }
 
+/**
+ * Plan mode, as a switch.
+ *
+ * The card used to put the current state in its title and the *opposite* state on a pill below it,
+ * so it read as contradicting itself — and both the pill and the title moved together, leaving
+ * nothing to say which one was the button. A switch states one thing and offers one action.
+ *
+ * [onTogglePlan] is handed the state to move to, because the two directions are different commands:
+ * bare `/plan` only ever enters plan mode, and leaving needs `/plan off`. Sending `/plan` for both,
+ * as this did, meant the control could turn plan mode on and never off again.
+ */
 @Composable
-private fun PlanCard(conversation: ConversationSnapshot, onTogglePlan: () -> Unit) {
-    val colors = DsTheme.colors
+private fun PlanCard(conversation: ConversationSnapshot, onTogglePlan: (active: Boolean) -> Unit) {
     val active = parsePlanActive(conversation) ?: return
     Card(
-        title = stringResource(if (active) R.string.plan_mode_on else R.string.plan_mode_off),
+        title = stringResource(R.string.plan_mode_title),
+        summary = stringResource(if (active) R.string.plan_mode_state_on else R.string.plan_mode_state_off),
+        // Open by default: unlike the other cards this one is a control, and a control you have to
+        // expand before you can reach is most of the way back to not having it.
+        initiallyExpanded = true,
     ) {
-        DsPill(
-            text = stringResource(if (active) R.string.plan_mode_off else R.string.plan_mode_on),
-            onClick = onTogglePlan,
+        ToggleRow(
+            label = stringResource(R.string.plan_mode_hint),
+            checked = active,
+            onChange = { onTogglePlan(!active) },
         )
     }
 }

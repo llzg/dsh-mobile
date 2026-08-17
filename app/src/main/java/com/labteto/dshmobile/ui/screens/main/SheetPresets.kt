@@ -107,7 +107,7 @@ internal fun PresetsSheet(
                                 DsPill(text = stringResource(R.string.presets_default))
                             }
                         }
-                        entry.description?.takeIf { it.isNotBlank() }?.let {
+                        entry.displayDescription()?.let {
                             Text(it, style = DsType.caption11, color = colors.labelTertiary)
                         }
                         entry.broken?.let {

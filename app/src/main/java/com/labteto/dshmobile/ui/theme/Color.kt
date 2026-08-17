@@ -119,7 +119,16 @@ object DsLight {
     val warnTertiary = Ds.Amber100
     val toastBg = Ds.Bluish800
     val tooltipBg = Ds.Bluish850
-    val userBubble = Ds.Deepseek50
+    /**
+     * One step darker than the harness's own `--dsw-specific-bubble` (`Deepseek50`), and the one
+     * deliberate divergence in this table.
+     *
+     * The web value is 1.06:1 against the white transcript — legible there only because the bubble
+     * is a wide pill in a 748px column on a desk monitor. At phone size and phone brightness the
+     * shape stopped reading, and a message you cannot tell apart from the assistant's is a worse
+     * failure than a fill that is a shade off the reference.
+     */
+    val userBubble = Ds.Deepseek100
     val userBubbleHighlight = Ds.Deepseek200
     val composerCard = Color(0xFFFFFFFF)
     val sidebar = Ds.Bluish50
