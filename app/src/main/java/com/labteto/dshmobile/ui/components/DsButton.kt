@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -103,7 +104,11 @@ fun DsButton(
         interactionSource = interaction,
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = if (normal) 16.dp else 12.dp),
+            // Height, not size. `fillMaxSize` here made the *content* claim the whole width it was
+            // offered, which pushed the button itself out to full width whatever the caller asked
+            // for — so any row of buttons rendered the first one and squeezed the rest to nothing.
+            // A button that wants to span its parent says so through `modifier`, as several do.
+            modifier = Modifier.fillMaxHeight().padding(horizontal = if (normal) 16.dp else 12.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {

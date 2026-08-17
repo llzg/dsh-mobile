@@ -3,6 +3,19 @@
 All notable changes to DSH Mobile are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/); the project uses SemVer.
 
+## [0.3.1] - 2026-08-17
+
+### Fixed
+
+- Only the first button in any row was drawn. `DsButton` laid its content out
+  with `fillMaxSize`, so the content claimed the whole width on offer and took
+  the button with it, leaving nothing for whatever came next — the details
+  panel showed **Rename** but not Fork or Archive, the export row showed
+  **Download session log** but not Copy, the disconnect dialog showed no
+  Cancel, and the update dialog added in 0.3.0 showed no **Later**. The content
+  now fills only the height; a button that wants to span its parent still says
+  so through its own modifier, as several already did.
+
 ## [0.3.0] - 2026-08-17
 
 The theme of this release is the difference between a control that exists and a
