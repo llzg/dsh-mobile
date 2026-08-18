@@ -118,7 +118,7 @@ private fun encodeQueryComponent(value: String): String =
     URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
 /**
- * Typed client for the harness unary + downlink wire protocol (v0.1.0-rc.5). Every unary method
+ * Typed client for the harness unary + downlink wire protocol (v0.1.0-rc.7). Every unary method
  * maps to one `POST /api/<method>` (see [rpcMapPath] for the path table) and returns [RpcResult]:
  * business failures arrive as HTTP 200 + `ok: false` and come back as [RpcResult.Err]; carrier
  * failures (non-2xx, transport, or decode) are folded into `RpcResult.Err` with code `internal`.
@@ -422,6 +422,25 @@ class DshApiClient(
      */
     suspend fun respond(rpcId: String, value: JsonElement): RpcReceipt? {
         val envelope = ClientResponse(rpcId = rpcId, result = RpcResult.Ok(value))
+        return try {
+            val response = transport.post("/api/respond", encodeClientResponse(envelope))
+            decodeFromString<RpcReceipt>(response.body)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Rejects a server-initiated request rather than answering it, by POSTing a client-response
+     * whose result is `ok: false`.
+     *
+     * A dismissal is not an empty answer. Closing a question with `{selected: []}` for every item
+     * is a valid *answer* the model reads as "no preference"; the harness's own client instead
+     * fails the wait, and the host then resolves the tool call as cancelled. Only the `cancelled`
+     * code is accepted here — the proxy answers `bad-response` to any other.
+     */
+    suspend fun respondError(rpcId: String, error: RpcError): RpcReceipt? {
+        val envelope = ClientResponse(rpcId = rpcId, result = RpcResult.Err(error))
         return try {
             val response = transport.post("/api/respond", encodeClientResponse(envelope))
             decodeFromString<RpcReceipt>(response.body)

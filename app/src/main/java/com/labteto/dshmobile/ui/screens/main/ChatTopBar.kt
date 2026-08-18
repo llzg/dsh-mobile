@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import com.labteto.dshmobile.R
 import com.labteto.dshmobile.core.wire.dto.SessionModelsValue
 import com.labteto.dshmobile.ui.components.DsIconButton
+import com.labteto.dshmobile.ui.components.DsSegment
+import com.labteto.dshmobile.ui.components.DsSegmented
 import com.labteto.dshmobile.ui.components.FeatherIcons
 import com.labteto.dshmobile.ui.components.StateDot
 import com.labteto.dshmobile.ui.components.StateDotState
@@ -258,20 +260,21 @@ private fun ChatTabRow(tab: ChatTab, onTabChange: (ChatTab) -> Unit) {
             .padding(horizontal = DsSpacing.medium, vertical = DsSpacing.tiny),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .clip(DsShapes.pillFull)
-                .background(colors.hoverSolid)
-                .padding(2.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            TabSegment(stringResource(R.string.chat_tab), tab == ChatTab.Chat) {
-                onTabChange(ChatTab.Chat)
-            }
-            TabSegment(stringResource(R.string.trajectory_title), tab == ChatTab.Trajectory) {
-                onTabChange(ChatTab.Trajectory)
-            }
-        }
+        // Which tab is live is load-bearing, not decoration: the two views render a user message
+        // completely differently — a right-aligned bubble in Chat, a `> line` of caption text in
+        // the Trajectory ledger — so a reader who cannot tell at a glance concludes the chat itself
+        // is broken.
+        DsSegmented(
+            segments = listOf(
+                DsSegment(TAB_CHAT, stringResource(R.string.chat_tab)),
+                DsSegment(TAB_TRAJECTORY, stringResource(R.string.trajectory_title)),
+            ),
+            selectedKey = if (tab == ChatTab.Chat) TAB_CHAT else TAB_TRAJECTORY,
+            onSelect = { key ->
+                onTabChange(if (key == TAB_CHAT) ChatTab.Chat else ChatTab.Trajectory)
+            },
+            role = Role.Tab,
+        )
     }
     Spacer(
         Modifier
@@ -281,38 +284,5 @@ private fun ChatTabRow(tab: ChatTab, onTabChange: (ChatTab) -> Unit) {
     )
 }
 
-/**
- * One segment. The selected one is accent-tinted, not merely a lighter grey.
- *
- * This is load-bearing, not decoration: the two views render a user message completely differently
- * — a right-aligned bubble in Chat, a `> line` of caption text in the Trajectory ledger — so a
- * reader who cannot tell at a glance which tab is live concludes the chat itself is broken. The
- * first cut of this control put a white chip on a `#F1F3F5` track, a 3% difference, and leaned
- * entirely on label darkness to carry the state.
- */
-@Composable
-private fun TabSegment(text: String, selected: Boolean, onClick: () -> Unit) {
-    val colors = DsTheme.colors
-    val emphasis by animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = DsAnimations.tabSwap,
-        label = "tabSegment",
-    )
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .heightIn(min = 24.dp)
-            .clip(DsShapes.pillFull)
-            .background(colors.accentTertiary.copy(alpha = emphasis))
-            // `selectable` rather than `clickable`: the tint is the only visual carrier of the
-            // state, so the selection has to reach assistive tech some other way.
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
-            .padding(horizontal = DsSpacing.medium, vertical = DsSpacing.tiny),
-    ) {
-        Text(
-            text,
-            style = DsType.tabText,
-            color = if (selected) colors.accent else colors.labelTertiary,
-        )
-    }
-}
+private const val TAB_CHAT = "chat"
+private const val TAB_TRAJECTORY = "trajectory"

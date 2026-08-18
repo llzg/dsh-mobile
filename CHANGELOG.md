@@ -3,6 +3,122 @@
 All notable changes to DSH Mobile are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/); the project uses SemVer.
 
+## [0.4.0] - 2026-08-18
+
+Two threads run through this release. The first is the question the agent asks
+you: the card it arrives in can now be folded away while you decide, and — less
+happily — the answer you type into it now actually reaches the model, which until
+this release it did not. The second is chips, which turn out to have been
+invisible on a light background since the beginning: the reasoning tiers in the
+model picker, and every other plain chip in the app.
+
+### Fixed
+
+- **Every free-text answer this app has ever sent was discarded in transit.** The
+  harness puts `custom` on the answer it belongs to; this client wrote it one
+  level out, beside the list of answers rather than on one of them. The host
+  parses that payload with a schema that *strips* keys it does not declare rather
+  than objecting to them, so nothing failed: the answer went out, came back
+  accepted, and reached the model with the typed text simply gone. Nobody could
+  have noticed from this end. The batch is now built from a type whose shape is
+  the wire's, and the mock harness enforces the host's real acceptance rules
+  rather than acknowledging whatever arrives — which is what would have caught it.
+- Even had it arrived, only one of them would have. A batch carried a single
+  `custom` for all its questions, taken from whichever one happened to be
+  answered first, so a second free-text answer overwrote nothing and went
+  nowhere. Each question now carries its own.
+- Paging back to check an earlier answer showed it blank, and paging forward
+  again overwrote the real one with the blank. The panel kept its selection
+  keyed on the page number, so leaving the page discarded it; the batch is now
+  one list of drafts that paging only moves a cursor through.
+- A batch that contained a plan review **alongside other questions** answered
+  only the plan review and left the rest unsent. The host compares an answer
+  batch against the request it resolves and refuses one of a different length
+  outright, so the response was rejected, the harness's wait stayed open, and the
+  `ask_user_question` call never unblocked — a hung session with nothing on
+  screen to explain it. The decision card now claims a request only when it can
+  answer all of it: one question, a plan to show, a binary choice, and an approve
+  label naming a real option. Everything else takes the ordinary flow, where
+  every answer is still reachable.
+- Dismissing a question was not a dismissal. **Cancel** answered every question
+  with an empty selection, which is a perfectly valid answer that the model reads
+  as "no preference". It now fails the request the way the harness's own client
+  does, and the host settles the tool call as cancelled.
+- **Chat about it** on a plan review answered *Decline* and then cleared the
+  draft, which told the agent something you had not said. It dismisses the
+  request instead — wanting to talk it over first is not one of the options on
+  offer. A plan review that offers no second option no longer draws a Decline
+  button that had nothing to send.
+- An option the model marks as its recommendation arrives with `(Recommended)`
+  appended to the label — the tool's own schema tells it to write that — and the
+  card showed the marker as part of the choice. It is now a badge beside the
+  label, in both the English and Chinese forms and both widths of parenthesis,
+  while the wire keeps the label whole, because the host checks a selection
+  against the labels it sent.
+- A question's supporting detail rendered as plain text, so a plan or a table in
+  it arrived as markup.
+- **Every plain chip in the app was invisible in light mode.** `DsPill` fills
+  itself with `bgLayer2`, faithfully to the harness — but in the harness's light
+  theme `bg-base` and all three `bg-layer` rungs are the same pure white, so a chip
+  on any of them is white on white. The web never notices: `:hover` paints the chip
+  the moment a pointer nears it. A touchscreen has no pointer to near it with, so
+  the model and preset triggers in the details panel, the subagent counts in the
+  drawer, the goal phase, the workflow status and the suggestion chips on the empty
+  session were all just runs of grey text, two of them tappable with nothing to say
+  so. Chips now rest on `bgModulePlatform`, which steps off every surface in both
+  themes; a chip that does something takes a hairline as well, that being what is
+  left to distinguish a trigger from a badge once both have a fill. This is the
+  third time this app has had to relearn that a hover-revealed affordance is an
+  invisible one — the chat-bar chips and the disclosure chevron were the first two.
+
+### Added
+
+- **The question card folds up.** A chevron in its header collapses it to the
+  title strip, so you can read the conversation you are being asked about and
+  then come back to it; the draft, the choice and the position in the batch all
+  survive. This is the harness's own rc.7 addition, and it earns its place twice
+  over here: the web card replaces the input bar in a fixed-height column, while
+  this one sits between the transcript and the composer, where a question with a
+  long detail and six options otherwise buries everything above it.
+- Options are numbered on a single choice and carry a check box on a multiple
+  one, so which kind of question you are looking at is visible before you tap.
+- The card says when an answer is incomplete, and jumps to the question that is
+  missing, rather than silently submitting empty answers. If the harness refuses
+  the answer outright it now says so; before, the card simply stayed put.
+
+### Changed
+
+- The model picker reads as a set of choices rather than a list of words. Each
+  model is a card now, the live one carrying the accent wash and border instead of
+  only a blue name and a tick stranded at the far edge, and the reasoning tiers sit
+  **inside** that card under a label that says what they set. They used to appear
+  under every model in the list — a dead control beneath each row nobody had
+  chosen, tripling the height of the sheet — and they were drawn as pills whose
+  unselected fill is `bgLayer2`, which is the sheet's own colour, so three of the
+  four tiers were invisible and the row read as a caption rather than a control.
+  The tiers now use the segmented track the Chat / Trajectory tabs already use,
+  lifted into `DsSegmented` so there is one such control rather than two. It gained
+  an outline on the way: the track's fill is a step off `bgLayer1`, but in dark mode
+  it is the *same* colour as `bgLayer2`, so on a sheet the fill alone showed nothing.
+- The card no longer grows without limit. It takes at most a fixed share of the
+  column and scrolls its options inside that, keeping the header and the actions
+  reachable. It was previously measured before the composer below it, so a long
+  batch could push the composer off the bottom of the screen entirely.
+- Protocol baseline moves to harness **0.1.0-rc.7**. Nothing on the wire moved
+  between rc.5 and rc.7 — no method, no event type, no projection key, no slash
+  command — so this is a re-verification rather than a migration. The one label
+  that did change: the `code` agent preset is **PTC mode** in English now, as it
+  already was in Chinese. The preset's id is untouched.
+- `docs/COMPATIBILITY.md` stops claiming the app compares the harness's version
+  against the baseline and warns on a mismatch. It never did, and it should not:
+  the harness releases far more often than this client and nearly always without
+  touching the client surface, so the warning would fire on almost every session
+  while still saying nothing about the changes that matter. The document now
+  describes what the app actually relies on, which is degrading on shape.
+- `docs/PROTOCOL.md` records how a question request is settled, including the
+  rules the host checks an answer against. It is the one shape in this protocol
+  where getting it wrong is silent.
+
 ## [0.3.1] - 2026-08-17
 
 ### Fixed

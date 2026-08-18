@@ -4,7 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Slash-command DTOs, ported from `packages/interaction/commands/src/types.ts` (v0.1.0-rc.5).
+ * Slash-command DTOs, ported from `packages/interaction/commands/src/types.ts` (v0.1.0-rc.7).
  *
  * The catalog is read through the typert remote `commands/list`; it is per-session and
  * deployment-dependent (a preset switch changes which commands an agent resolves), so it is

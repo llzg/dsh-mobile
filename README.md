@@ -71,7 +71,7 @@ a [feature tour](https://github.com/sorsama/deepseek-harness-mobile/wiki/Feature
 
 - Android 8.0+ (minSdk 26).
 - A running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
-  (tested against `0.1.0-rc.5`).
+  (tested against `0.1.0-rc.7`).
 
 ## Quick start
 

@@ -10,11 +10,14 @@ import com.labteto.dshmobile.core.session.EventFold
 import com.labteto.dshmobile.core.session.QueueItem
 import com.labteto.dshmobile.core.session.SessionEventEnvelope
 import com.labteto.dshmobile.core.wire.DshApiClient
+import com.labteto.dshmobile.core.wire.RpcReceipt
 import com.labteto.dshmobile.core.wire.RpcResult
 import com.labteto.dshmobile.core.wire.ServerRequest
 import com.labteto.dshmobile.core.wire.decodeFromJsonElement
+import com.labteto.dshmobile.core.wire.encodeToJsonElement
 import com.labteto.dshmobile.core.wire.dto.AgentPresetListValue
 import com.labteto.dshmobile.core.wire.dto.AgentPresetSelectRequest
+import com.labteto.dshmobile.core.wire.dto.AskUserQuestionAnswer
 import com.labteto.dshmobile.core.wire.dto.AskUserQuestionIntent
 import com.labteto.dshmobile.core.wire.dto.AskUserQuestionItem
 import com.labteto.dshmobile.core.wire.dto.CUSTOM_PRESET
@@ -40,6 +43,7 @@ import com.labteto.dshmobile.core.wire.dto.PermissionSelect
 import com.labteto.dshmobile.core.wire.dto.PluginInventorySnapshot
 import com.labteto.dshmobile.core.wire.dto.PlanStateView
 import com.labteto.dshmobile.core.wire.dto.PromptContentPart
+import com.labteto.dshmobile.core.wire.dto.QUESTION_CANCELLED
 import com.labteto.dshmobile.core.wire.dto.QueueAction
 import com.labteto.dshmobile.core.wire.dto.SessionAttachmentRequest
 import com.labteto.dshmobile.core.wire.dto.SessionCancelRequest
@@ -92,7 +96,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -141,6 +144,24 @@ sealed interface CommandOutcome {
 
     /** The command ran and reported a usage or state failure. */
     data class Failed(val message: String) : CommandOutcome
+}
+
+/** What the harness did with an answer to a question request, or with a dismissal of one. */
+sealed interface QuestionOutcome {
+    /**
+     * Taken. The panel leaves when the `question/resolved` frame lands rather than now — the
+     * receipt only says the response was well-formed for the wait it addressed.
+     */
+    data object Accepted : QuestionOutcome
+
+    /**
+     * Refused. `bad-response` means the payload did not match the request it answered;
+     * `not-pending` means the wait had already settled.
+     */
+    data class Refused(val reason: String) : QuestionOutcome
+
+    /** The POST never completed, so nothing is known about the wait. */
+    data object Unsent : QuestionOutcome
 }
 
 /** Wire workspace -> renderable row, parsing the ISO-8601 stamp once at the boundary. */
@@ -1142,33 +1163,63 @@ class SessionStore @Inject constructor(
         if (receipt == null) log("approval response not acknowledged for $approvalId")
     }
 
-    suspend fun answerQuestions(
-        sessionId: String,
-        answers: List<Pair<String, List<String>>>,
-        custom: String? = null,
-    ) {
-        val api = apiOrNull() ?: return
-        val rpcId = synchronized(lock) { questionRpcBySession[sessionId] }
-        if (rpcId == null) {
-            log("no pending question for session $sessionId")
-            return
-        }
-        val answersJson = JsonArray(answers.map { (id, selected) ->
-            buildJsonObject {
-                put("id", JsonPrimitive(id))
-                put("selected", JsonArray(selected.map { JsonPrimitive(it) }))
-            }
-        })
-        val answerObj = buildJsonObject {
-            put("answers", answersJson)
-            custom?.let { put("custom", JsonPrimitive(it)) }
-        }
+    /**
+     * Answers a pending question batch.
+     *
+     * The payload is serialized from a typed DTO rather than assembled by hand, and that is the
+     * whole point of the type: `custom` belongs to the answer *item*, and the host's schema strips
+     * keys it does not recognise instead of objecting to them. A `custom` written one level out
+     * therefore reached the wire, was accepted, and simply never reached the model — the user's
+     * typed answer deleted in transit with nothing to show for it.
+     */
+    suspend fun answerQuestions(sessionId: String, answer: AskUserQuestionAnswer): QuestionOutcome {
+        val api = apiOrNull() ?: return QuestionOutcome.Unsent
+        val rpcId = pendingQuestionRpc(sessionId) ?: return QuestionOutcome.Refused("not-pending")
         val value = buildJsonObject {
             put("sessionId", JsonPrimitive(sessionId))
-            put("answer", answerObj)
+            put("answer", encodeToJsonElement(AskUserQuestionAnswer.serializer(), answer))
         }
-        val receipt = api.respond(rpcId, value)
-        if (receipt == null) log("question response not acknowledged for $sessionId")
+        return receiptOutcome(api.respond(rpcId, value), "question response", sessionId)
+    }
+
+    /**
+     * Dismisses a pending question batch instead of answering it.
+     *
+     * Answering every item with an empty selection is a perfectly valid *answer*, and the model
+     * reads it as "no preference". A dismissal fails the wait instead, and the host then settles
+     * the tool call as cancelled. The code has to be exactly `cancelled`; the proxy refuses an
+     * `ok:false` carrying any other.
+     */
+    suspend fun dismissQuestions(sessionId: String): QuestionOutcome {
+        val api = apiOrNull() ?: return QuestionOutcome.Unsent
+        val rpcId = pendingQuestionRpc(sessionId) ?: return QuestionOutcome.Refused("not-pending")
+        return receiptOutcome(
+            api.respondError(rpcId, QUESTION_CANCELLED),
+            "question dismissal",
+            sessionId,
+        )
+    }
+
+    private fun pendingQuestionRpc(sessionId: String): String? {
+        val rpcId = synchronized(lock) { questionRpcBySession[sessionId] }
+        if (rpcId == null) log("no pending question for session $sessionId")
+        return rpcId
+    }
+
+    private fun receiptOutcome(
+        receipt: RpcReceipt?,
+        what: String,
+        sessionId: String,
+    ): QuestionOutcome = when {
+        receipt == null -> {
+            log("$what not acknowledged for $sessionId")
+            QuestionOutcome.Unsent
+        }
+        receipt.accepted -> QuestionOutcome.Accepted
+        else -> {
+            log("$what refused for $sessionId: ${receipt.reason}")
+            QuestionOutcome.Refused(receipt.reason ?: "refused")
+        }
     }
 
     suspend fun selectModel(provider: String, model: String, reasoningEffort: String? = null) {

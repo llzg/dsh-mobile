@@ -33,15 +33,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.labteto.dshmobile.ui.media.sampleSizeFor
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.labteto.dshmobile.core.wire.dto.AskUserQuestionIntent
+import com.labteto.dshmobile.core.wire.dto.AskUserQuestionAnswer
+import com.labteto.dshmobile.core.wire.dto.AskUserQuestionAnswerItem
+import com.labteto.dshmobile.core.wire.dto.AskUserQuestionOption
+import com.labteto.dshmobile.data.QuestionOutcome
 import com.labteto.dshmobile.data.SessionStore
 import com.labteto.dshmobile.ui.components.ApprovalPanel
 import com.labteto.dshmobile.ui.components.ConnectionBanner
 import com.labteto.dshmobile.ui.components.DsToastHost
 import com.labteto.dshmobile.ui.components.PlanReviewPanel
-import com.labteto.dshmobile.ui.components.QuestionAnswer
-import com.labteto.dshmobile.ui.components.QuestionItem
-import com.labteto.dshmobile.ui.components.QuestionOption
+import com.labteto.dshmobile.ui.components.planReviewOf
 import com.labteto.dshmobile.ui.components.QuestionsPanel
 import com.labteto.dshmobile.ui.components.rememberDsToast
 import com.labteto.dshmobile.ui.rememberSessionStore
@@ -123,6 +124,22 @@ fun ChatScreen(
             is com.labteto.dshmobile.data.CommandOutcome.Failed ->
                 toast.second(commandFailed.format(outcome.message))
         }
+    }
+
+    val answerRefused = stringResource(R.string.questions_answer_refused)
+    val answerUnsent = stringResource(R.string.questions_answer_unsent)
+
+    /**
+     * What to tell the user about a question response, or null when the harness took it.
+     *
+     * A refusal is worth naming rather than swallowing: the host's wait stays open and the tool
+     * call that opened it stays blocked, so a card that quietly did nothing would leave the session
+     * stuck with no explanation.
+     */
+    fun refusalOf(outcome: QuestionOutcome): String? = when (outcome) {
+        is QuestionOutcome.Accepted -> null
+        is QuestionOutcome.Refused -> answerRefused.format(outcome.reason)
+        is QuestionOutcome.Unsent -> answerUnsent
     }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -291,57 +308,50 @@ fun ChatScreen(
             }
             val questions = pendingQuestions
             if (questions != null && questions.sessionId == currentSessionId) {
-                val planReview = questions.items.firstOrNull {
-                    it.intent is AskUserQuestionIntent.PlanReview
-                }
-                val planIntent = planReview?.intent as? AskUserQuestionIntent.PlanReview
-                if (planReview != null && planIntent != null) {
-                    // A plan review rides the question channel but is a different decision, so it
-                    // gets the panel built for it rather than a generic multiple choice. The intent
-                    // names the option label that approves; every other option declines.
-                    val declineLabel = planReview.options
-                        ?.map { it.label }
-                        ?.firstOrNull { it != planIntent.approve }
-                    fun answer(label: String?) {
+                var planBusy by remember(questions.rpcId) { mutableStateOf(false) }
+                // A plan review rides the question channel but is a different decision, so it gets
+                // the card built for it. The narrowing decides which — and hands back anything the
+                // card could not answer in full, because the card answers one question and the host
+                // refuses an answer batch shorter than the request it resolves.
+                val review = remember(questions.rpcId) { planReviewOf(questions.items) }
+                if (review != null) {
+                    fun settle(block: suspend () -> QuestionOutcome) {
+                        planBusy = true
                         scope.launch {
-                            store.answerQuestions(
-                                questions.sessionId,
-                                listOf(planReview.id to listOfNotNull(label)),
-                            )
+                            refusalOf(block())?.let {
+                                planBusy = false
+                                toast.second(it)
+                            }
                         }
                     }
+                    fun decide(option: AskUserQuestionOption) = settle {
+                        store.answerQuestions(
+                            questions.sessionId,
+                            AskUserQuestionAnswer(
+                                listOf(AskUserQuestionAnswerItem(review.id, listOf(option.label))),
+                            ),
+                        )
+                    }
                     PlanReviewPanel(
-                        planMarkdown = planReview.detail ?: planReview.question,
-                        onApprove = { answer(planIntent.approve) },
-                        onDecline = { answer(declineLabel) },
+                        review = review,
+                        busy = planBusy,
+                        onApprove = { decide(review.approve) },
+                        onDecline = { review.decline?.let { decide(it) } },
+                        // Wanting to talk it over first is not one of the options the asker stated,
+                        // so it ends the request rather than answering it with the refusal.
                         onDiscuss = {
-                            answer(declineLabel)
                             draft = ""
+                            settle { store.dismissQuestions(questions.sessionId) }
                         },
                     )
                 } else {
                     QuestionsPanel(
-                        questions = questions.items.map { item ->
-                            QuestionItem(
-                                id = item.id,
-                                question = item.question,
-                                detail = item.detail,
-                                header = item.header,
-                                options = item.options?.map { QuestionOption(it.label, it.description) }
-                                    ?: emptyList(),
-                                multiSelect = item.multiSelect ?: false,
-                            )
+                        requestKey = questions.rpcId,
+                        questions = questions.items,
+                        onSubmit = { answer ->
+                            refusalOf(store.answerQuestions(questions.sessionId, answer))
                         },
-                        onSubmit = { answers -> submitAnswers(scope, store, questions.sessionId, answers) },
-                        onCancel = {
-                            scope.launch {
-                                store.answerQuestions(
-                                    questions.sessionId,
-                                    questions.items.map { it.id to emptyList<String>() },
-                                    null,
-                                )
-                            }
-                        },
+                        onDismiss = { refusalOf(store.dismissQuestions(questions.sessionId)) },
                     )
                 }
             }
@@ -404,20 +414,6 @@ fun ChatScreen(
 /** Which sheet, if any, is open over the chat surface. */
 private enum class ChatSheet { Commands, Models, Presets, Subagents }
 
-private fun submitAnswers(
-    scope: kotlinx.coroutines.CoroutineScope,
-    store: SessionStore,
-    sessionId: String,
-    answers: List<QuestionAnswer>,
-) {
-    scope.launch {
-        store.answerQuestions(
-            sessionId,
-            answers.map { it.id to it.selected },
-            answers.firstOrNull { it.custom != null }?.custom,
-        )
-    }
-}
 
 /**
  * A thumbnail for the composer strip, decoded straight off the picked bytes.

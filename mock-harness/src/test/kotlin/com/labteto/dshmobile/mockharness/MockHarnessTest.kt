@@ -58,7 +58,7 @@ class MockHarnessTest {
         val result = body["result"]!!.jsonObject
         assertTrue(result["ok"]!!.jsonPrimitive.boolean)
         val value = result["value"]!!.jsonObject
-        assertEquals("0.1.0-rc.5", value["version"]!!.jsonPrimitive.content)
+        assertEquals("0.1.0-rc.7", value["version"]!!.jsonPrimitive.content)
         assertEquals("C:\\demo", value["cwd"]!!.jsonPrimitive.content)
         assertEquals(0, value["attachedSessions"]!!.jsonPrimitive.int)
         assertTrue(value["canOpenPath"]!!.jsonPrimitive.boolean)

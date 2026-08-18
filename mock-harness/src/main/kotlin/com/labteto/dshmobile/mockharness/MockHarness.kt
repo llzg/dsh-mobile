@@ -24,6 +24,7 @@ import io.ktor.websocket.send
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -43,7 +44,9 @@ import java.util.concurrent.ConcurrentHashMap
  *  - unary calls: `POST /api/<method>` with a `client-request` envelope, answered with a
  *    `server-response` envelope carrying `{"ok": true, "value": ...}` or
  *    `{"ok": false, "error": {"code", "message", "details"}}`;
- *  - answers: `POST /api/respond` with a `client-response` envelope -> `{"accepted": true}`;
+ *  - answers: `POST /api/respond` with a `client-response` envelope. An answer to a question
+ *    this mock pushed is judged by [judgeQuestionResponse], the host's own acceptance law;
+ *    anything else is acknowledged;
  *  - downlink-only WebSockets `/api/events.mux` and `/api/events.host`, where the server
  *    pushes `server-request` frames and the client must not send.
  *
@@ -58,6 +61,7 @@ class MockHarness(
     private val failHandlers = ConcurrentHashMap<String, (JsonElement) -> RpcErrorData>()
     private val asyncHandlers = ConcurrentHashMap<String, suspend (JsonElement) -> JsonElement>()
     private val muxSockets = ConcurrentHashMap.newKeySet<WebSocketSession>()
+    private val pendingQuestions = ConcurrentHashMap<String, PendingQuestion>()
     private val hostSockets = ConcurrentHashMap.newKeySet<WebSocketSession>()
 
     @Volatile
@@ -168,13 +172,45 @@ class MockHarness(
      * present) the frame payload; otherwise the whole [frame] becomes the payload and the
      * method defaults to `"frame"`. Every broadcast gets a fresh `rpcId`.
      */
-    suspend fun pushMux(frame: JsonElement) = broadcast(muxSockets, frame)
+    suspend fun pushMux(frame: JsonElement): String {
+        val rpcId = broadcast(muxSockets, frame)
+        rememberQuestion(rpcId, payloadOf(frame))
+        return rpcId
+    }
+
+    /**
+     * Remember a pushed question request, so an answer to it is held to the host's own standard
+     * instead of being waved through. Everything else — an approval, a frame no test registered —
+     * keeps the blanket acknowledgement.
+     */
+    private fun rememberQuestion(rpcId: String, payload: JsonElement) {
+        val frame = payload as? JsonObject ?: return
+        if ((frame["type"] as? JsonPrimitive)?.contentOrNull != "question/requested") return
+        val sessionId = (frame["sessionId"] as? JsonPrimitive)?.contentOrNull ?: return
+        val questions = frame["questions"] as? JsonArray ?: return
+        pendingQuestions[rpcId] = PendingQuestion(sessionId, questions)
+    }
+
+    /** The receipt for one `/api/respond` body, as JSON. */
+    private fun judgeRespond(body: String): String {
+        val envelope = runCatching { Json.parseToJsonElement(body) }.getOrNull() as? JsonObject
+            ?: return REFUSED_BAD_RESPONSE
+        val rpcId = (envelope["rpcId"] as? JsonPrimitive)?.contentOrNull
+        val pending = rpcId?.let { pendingQuestions[it] } ?: return ACCEPTED
+        return when (val receipt = judgeQuestionResponse(envelope, pending)) {
+            is QuestionReceipt.Accepted -> {
+                pendingQuestions.remove(rpcId)
+                ACCEPTED
+            }
+            is QuestionReceipt.Refused -> """{"accepted":false,"reason":"${receipt.reason}"}"""
+        }
+    }
 
     /**
      * Broadcasts a `server-request` frame to every connected `/api/events.host` socket;
      * see [pushMux] for the frame shape.
      */
-    suspend fun pushHost(frame: JsonElement) = broadcast(hostSockets, frame)
+    suspend fun pushHost(frame: JsonElement): String = broadcast(hostSockets, frame)
 
     /**
      * The session-log download: a plain `GET` answered with an attachment, not an RPC. Serves
@@ -201,7 +237,7 @@ class MockHarness(
         }
         val pathMethod = pathMethodOverride ?: parameters["method"] ?: ""
         if (pathMethod == "respond") {
-            respondJson("""{"accepted":true}""")
+            respondJson(judgeRespond(runCatching { receiveText() }.getOrDefault("")))
             return
         }
         val body = runCatching { receiveText() }.getOrDefault("")
@@ -250,15 +286,20 @@ class MockHarness(
         }
     }
 
-    private suspend fun broadcast(sockets: MutableSet<WebSocketSession>, frame: JsonElement) {
+    /** The frame's payload slot, or the frame itself when it carries no envelope of its own. */
+    private fun payloadOf(frame: JsonElement): JsonElement =
+        (frame as? JsonObject)?.get("payload") ?: frame
+
+    /** Sends the frame to every listener and returns the rpcId it was minted with. */
+    private suspend fun broadcast(sockets: MutableSet<WebSocketSession>, frame: JsonElement): String {
         val frameObject = frame as? JsonObject
         val method = (frameObject?.get("method") as? JsonPrimitive)?.contentOrNull ?: "frame"
-        val payload = frameObject?.get("payload") ?: frame
+        val rpcId = UUID.randomUUID().toString()
         val envelope = buildJsonObject {
             put("type", "server-request")
-            put("rpcId", UUID.randomUUID().toString())
+            put("rpcId", rpcId)
             put("method", method)
-            put("payload", payload)
+            put("payload", payloadOf(frame))
         }.toString()
         for (session in sockets) {
             try {
@@ -267,11 +308,12 @@ class MockHarness(
                 // A disconnected client must not abort the broadcast.
             }
         }
+        return rpcId
     }
 
     private fun describeValue(): JsonObject {
         val base = buildJsonObject {
-            put("version", "0.1.0-rc.5")
+            put("version", "0.1.0-rc.7")
             put("cwd", "C:\\demo")
             put("attachedSessions", 0)
             put("canOpenPath", true)
@@ -358,6 +400,9 @@ class MockHarness(
         }
     }
 }
+
+private const val ACCEPTED = """{"accepted":true}"""
+private const val REFUSED_BAD_RESPONSE = """{"accepted":false,"reason":"bad-response"}"""
 
 private suspend fun ApplicationCall.respondJson(json: String) {
     respondText(json, ContentType.Application.Json, HttpStatusCode.OK)

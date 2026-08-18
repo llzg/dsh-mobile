@@ -25,7 +25,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Subagents-domain DTOs, ported from `packages/host/apiproxy/src/api/subagents.schema.ts` and
- * `packages/host/apiproxy/src/api/subagents.ts` (v0.1.0-rc.5).
+ * `packages/host/apiproxy/src/api/subagents.ts` (v0.1.0-rc.7).
  */
 
 /**

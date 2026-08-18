@@ -76,6 +76,44 @@ Respond receipt:
 {"accepted":true} | {"accepted":false,"reason":"not-pending"|"bad-response"}
 ```
 
+### Answering a question request
+
+`question/requested` is settled through `/api/respond`, and the host holds the
+answer to the exact request it resolves. `custom` rides the **answer item**, not
+the batch:
+
+```json
+{"sessionId":"…","answer":{"answers":[
+  {"id":"approach","selected":["Rewrite (Recommended)"]},
+  {"id":"notes","selected":[],"custom":"ship it on Friday"}]}}
+```
+
+The payload is parsed with a schema that **strips** undeclared keys rather than
+rejecting them, so a misplaced field does not fail — it vanishes, and the answer
+is accepted without it. Then every clause below must hold, or the whole batch
+comes back `bad-response` with the wait still open and the tool call still
+blocked:
+
+- one answer per question, **in request order**; the host pairs them by position
+  and compares each `id`, so a partial or reordered batch is refused;
+- no duplicate labels, and every label must be one the question itself offered
+  (a question with no options can carry no selection);
+- `custom` omitted when there is none — a present-but-blank one is a refusal;
+- on a **single-select** question, `custom` and a non-empty `selected` are
+  mutually exclusive, and `selected` may carry at most one label;
+- a skipped question is still answered, with `selected: []` and no `custom`.
+
+Dismissing the request is a different message — `ok: false`, and only this code
+is accepted:
+
+```json
+{"type":"client-response","rpcId":"…","result":{"ok":false,
+ "error":{"code":"cancelled","message":"the user closed this question request","details":{}}}}
+```
+
+Answering every item with an empty selection is *not* a dismissal: it is a valid
+answer, and the model reads it as no preference.
+
 ### Event streams (WebSocket, downlink-only)
 
 `/api/events.mux` (session events, approvals, questions, queues, jobs,

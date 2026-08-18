@@ -27,7 +27,22 @@ import com.labteto.dshmobile.ui.theme.DsTheme
 import com.labteto.dshmobile.ui.theme.DsType
 import com.labteto.dshmobile.ui.theme.DshTheme
 
-/** Compact h24 pill chip; [selected] adds an inset border, [warn] uses the warn palette. */
+/**
+ * Compact h24 chip: a badge at rest, a trigger when it takes an [onClick].
+ *
+ * The resting fill is `bgModulePlatform` rather than the harness's `bgLayer2`, and that is a
+ * deliberate divergence from a faithful port. In the harness's light theme `bg-base` and all three
+ * `bg-layer` rungs are the same pure white, so a pill at `bg-layer-2` on any of them is white on
+ * white — the web gets away with it because `:hover` paints the chip the moment a pointer nears it.
+ * A touchscreen has no pointer to near it with, so the chip has to be visible at rest or it is not
+ * a chip at all: it is a run of grey text that happens to be tappable. The same reasoning already
+ * put the model, preset and subagent triggers in the chat bar into pills, and put a permanent
+ * chevron on [DisclosureRow].
+ *
+ * A tappable chip additionally takes a hairline, which is the only affordance separating it from a
+ * badge once both have a fill. [selected] takes the accent wash the settings chips and the model
+ * cards use — and which the harness itself uses for its own recommended badge. [warn] is unchanged.
+ */
 @Composable
 fun DsPill(
     text: String,
@@ -50,11 +65,15 @@ fun DsPill(
     
     val background = when {
         warn -> colors.warnTertiary
-        selected -> colors.hoverSolid
-        else -> colors.bgLayer2
+        selected -> colors.accentTertiary
+        else -> colors.bgModulePlatform
     }
-    val contentColor = if (warn) colors.warnLabel else colors.labelSecondary
-    
+    val contentColor = when {
+        warn -> colors.warnLabel
+        selected -> colors.accent
+        else -> colors.labelSecondary
+    }
+
     Surface(
         onClick = onClick ?: {},
         modifier = modifier
@@ -67,7 +86,13 @@ fun DsPill(
         shape = shape,
         color = background,
         contentColor = contentColor,
-        border = if (selected && !warn) BorderStroke(1.dp, colors.borderL2) else null,
+        // Outlined only when it is a trigger: with every chip now carrying a fill, the hairline is
+        // what is left to say "this one does something" without a hover state to say it for you.
+        border = if (onClick != null && !warn && !selected) {
+            BorderStroke(1.dp, colors.borderL2)
+        } else {
+            null
+        },
         interactionSource = interactionSource,
     ) {
         Box(
@@ -89,9 +114,10 @@ fun DsPill(
 private fun DsPillPreview() {
     DshTheme {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DsPill("Plain", onClick = {})
+            DsPill("Badge")
+            DsPill("Trigger", onClick = {})
             DsPill("Selected", selected = true, onClick = {})
-            DsPill("Warn", warn = true, onClick = {})
+            DsPill("Warn", warn = true)
         }
     }
 }

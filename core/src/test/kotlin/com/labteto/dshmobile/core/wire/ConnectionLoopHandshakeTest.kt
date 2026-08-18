@@ -59,7 +59,7 @@ class ConnectionLoopHandshakeTest {
     private fun describeOk() = RpcHttpResponse(
         200,
         """{"type":"server-response","rpcId":"r","result":{"ok":true,"value":""" +
-            """{"version":"0.1.0-rc.5","cwd":"/tmp","attachedSessions":0,"canOpenPath":false}}}""",
+            """{"version":"0.1.0-rc.7","cwd":"/tmp","attachedSessions":0,"canOpenPath":false}}}""",
     )
 
     private fun describeErr(code: String) = RpcHttpResponse(
@@ -156,7 +156,7 @@ class ConnectionLoopHandshakeTest {
         loop.stop()
 
         assertEquals(listOf(HandshakeStep.OPENING_STREAMS, HandshakeStep.DESCRIBING), recorder.steps.take(2))
-        assertEquals("0.1.0-rc.5", recorder.connected.first().version)
+        assertEquals("0.1.0-rc.7", recorder.connected.first().version)
         assertTrue(recorder.failures.isEmpty())
     }
 }

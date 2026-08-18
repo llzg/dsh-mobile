@@ -25,7 +25,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Downlink stream frame unions, ported exactly from `packages/host/apiproxy/src/api/events.ts`
- * (v0.1.0-rc.5). A frame is the payload slot of a downstream ServerRequest; dispatch on `type`.
+ * (v0.1.0-rc.7). A frame is the payload slot of a downstream ServerRequest; dispatch on `type`.
  * Unknown frame kinds fall back to [UnknownMuxFrame] / [UnknownHostFrame] preserving the raw JSON.
  */
 
@@ -117,6 +117,47 @@ data class AskUserQuestionItem(
     /** Optional presentation intent for capable UIs. */
     @SerialName("intent") val intent: AskUserQuestionIntent? = null,
 )
+
+/**
+ * Answer to one question. `custom` rides the *item*, not the batch beside it — the harness
+ * schema (`packages/host/apiproxy/src/api/questions.schema.ts`) puts it here, and a key placed
+ * anywhere else is stripped by its zod parse without a word, so the answer arrives empty.
+ *
+ * The codec suppresses explicit nulls, so an absent `custom` is omitted rather than sent as
+ * `null` — which is what `matchesQuestions` treats as "no free text" (it rejects a *blank* one).
+ */
+@Serializable
+data class AskUserQuestionAnswerItem(
+    /** The answered question's id, echoed back. */
+    @SerialName("id") val id: String,
+    /** Selected option labels, verbatim — including any `(Recommended)` suffix. */
+    @SerialName("selected") val selected: List<String> = emptyList(),
+    /** Free-text "Other" answer; absent when the user typed none. */
+    @SerialName("custom") val custom: String? = null,
+)
+
+/**
+ * The human's answer to a whole `question/requested` batch.
+ *
+ * One item per question, in request order: the host checks the count and the id at each index
+ * (`matchesQuestions`, `packages/host/apiproxy/src/api-proxy.ts`) and refuses the response
+ * outright if either differs, leaving the tool blocked. A question the user skipped is still
+ * answered — with an empty selection.
+ */
+@Serializable
+data class AskUserQuestionAnswer(
+    @SerialName("answers") val answers: List<AskUserQuestionAnswerItem> = emptyList(),
+)
+
+/**
+ * The error a client sends to dismiss a question request rather than answer it.
+ *
+ * The proxy accepts an `ok:false` client-response for a question only when the code is exactly
+ * `cancelled`; anything else comes back as `bad-response` and the wait stays open. `details` is
+ * required by the schema, and [RpcError] defaults it to `{}` — which reaches the wire because the
+ * codec encodes defaults.
+ */
+val QUESTION_CANCELLED: RpcError = RpcError("cancelled", "the user closed this question request")
 
 // ============================================================================================
 // Mux stream frames
