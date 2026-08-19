@@ -1,4 +1,6 @@
-@file:OptIn(kotlinx.serialization.InternalSerializationApi::class)
+@file:OptIn(
+    kotlinx.serialization.InternalSerializationApi::class,
+)
 
 package com.labteto.dshmobile.core.wire.dto
 
@@ -7,10 +9,9 @@ import com.labteto.dshmobile.core.wire.encodeToJsonElement
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.SerialDescriptor
-import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.buildClassSerialDescriptor
-import kotlinx.serialization.descriptors.buildSerialDescriptor
 import kotlinx.serialization.descriptors.element
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
@@ -85,17 +86,20 @@ data class UnknownSubagentListEntry(
 /** Custom two-level (kind → mode) serializer for [SubagentListEntry]. */
 object SubagentListEntrySerializer : KSerializer<SubagentListEntry> {
     override val descriptor: SerialDescriptor = buildClassSerialDescriptor("SubagentListEntry") {
-        element("kind", buildSerialDescriptor("kotlin.String", PrimitiveKind.STRING))
-        element("id", buildSerialDescriptor("kotlin.String", PrimitiveKind.STRING), isOptional = true)
-        element("mode", buildSerialDescriptor("kotlin.String", PrimitiveKind.STRING), isOptional = true)
-        element("reason", buildSerialDescriptor("kotlin.String", PrimitiveKind.STRING), isOptional = true)
+        element("kind", String.serializer().descriptor)
+        element("id", String.serializer().descriptor, isOptional = true)
+        element("mode", String.serializer().descriptor, isOptional = true)
+        element("reason", String.serializer().descriptor, isOptional = true)
     }
 
     override fun serialize(encoder: Encoder, value: SubagentListEntry) {
         val json: JsonElement = when (value) {
-            is SubagentListEntry.ChildOneShot -> encodeToJsonElement(SubagentListEntry.ChildOneShot.serializer(), value)
-            is SubagentListEntry.ChildContinuable -> encodeToJsonElement(SubagentListEntry.ChildContinuable.serializer(), value)
-            is SubagentListEntry.Diagnostic -> encodeToJsonElement(SubagentListEntry.Diagnostic.serializer(), value)
+            is SubagentListEntry.ChildOneShot ->
+                encodeToJsonElement(SubagentListEntry.ChildOneShot.serializer(), value).withKind(value.kind)
+            is SubagentListEntry.ChildContinuable ->
+                encodeToJsonElement(SubagentListEntry.ChildContinuable.serializer(), value).withKind(value.kind)
+            is SubagentListEntry.Diagnostic ->
+                encodeToJsonElement(SubagentListEntry.Diagnostic.serializer(), value).withKind(value.kind)
             is UnknownSubagentListEntry -> value.raw
         }
         (encoder as JsonEncoder).encodeJsonElement(json)
@@ -118,6 +122,17 @@ object SubagentListEntrySerializer : KSerializer<SubagentListEntry> {
         }
     }
 }
+
+/**
+ * Concrete serializers omit the computed [SubagentListEntry.kind]; restore it for the wire.
+ * `mode` distinguishes child subtypes and survives because `WireJson` encodes defaults.
+ */
+private fun JsonElement.withKind(kind: String): JsonElement = JsonObject(
+    linkedMapOf<String, JsonElement>().apply {
+        putAll(this@withKind.jsonObject)
+        put("kind", JsonPrimitive(kind))
+    },
+)
 
 /** Complete direct-child catalog plus the delivery-time parent availability hint. */
 @Serializable
@@ -189,4 +204,3 @@ data class SubagentInterruptRequest(
 data class SubagentInterruptValue(
     @SerialName("accepted") val accepted: Boolean = true,
 )
-
