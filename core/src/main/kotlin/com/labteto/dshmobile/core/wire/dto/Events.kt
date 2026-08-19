@@ -1,4 +1,7 @@
-@file:OptIn(kotlinx.serialization.InternalSerializationApi::class)
+@file:OptIn(
+    kotlinx.serialization.ExperimentalSerializationApi::class,
+    kotlinx.serialization.InternalSerializationApi::class,
+)
 
 package com.labteto.dshmobile.core.wire.dto
 
@@ -7,6 +10,7 @@ import com.labteto.dshmobile.core.wire.encodeToJsonElement
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationStrategy
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.SerialKind
@@ -20,6 +24,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -89,11 +94,11 @@ object ContentBlockSerializer : KSerializer<ContentBlock> {
 
     override fun serialize(encoder: Encoder, value: ContentBlock) {
         val json: JsonElement = when (value) {
-            is ContentBlock.Text -> encodeToJsonElement(ContentBlock.Text.serializer(), value)
-            is ContentBlock.Reasoning -> encodeToJsonElement(ContentBlock.Reasoning.serializer(), value)
-            is ContentBlock.Image -> encodeToJsonElement(ContentBlock.Image.serializer(), value)
-            is ContentBlock.ToolCall -> encodeToJsonElement(ContentBlock.ToolCall.serializer(), value)
-            is ContentBlock.ToolResult -> encodeToJsonElement(ContentBlock.ToolResult.serializer(), value)
+            is ContentBlock.Text -> encodeWithType(ContentBlock.Text.serializer(), value)
+            is ContentBlock.Reasoning -> encodeWithType(ContentBlock.Reasoning.serializer(), value)
+            is ContentBlock.Image -> encodeWithType(ContentBlock.Image.serializer(), value)
+            is ContentBlock.ToolCall -> encodeWithType(ContentBlock.ToolCall.serializer(), value)
+            is ContentBlock.ToolResult -> encodeWithType(ContentBlock.ToolResult.serializer(), value)
             is UnknownContentBlock -> value.raw
         }
         (encoder as JsonEncoder).encodeJsonElement(json)
@@ -181,13 +186,13 @@ object StreamChunkSerializer : KSerializer<StreamChunk> {
 
     override fun serialize(encoder: Encoder, value: StreamChunk) {
         val json: JsonElement = when (value) {
-            is StreamChunk.BlockStart -> encodeToJsonElement(StreamChunk.BlockStart.serializer(), value)
-            is StreamChunk.TextDelta -> encodeToJsonElement(StreamChunk.TextDelta.serializer(), value)
-            is StreamChunk.ReasoningDelta -> encodeToJsonElement(StreamChunk.ReasoningDelta.serializer(), value)
-            is StreamChunk.ToolCallDelta -> encodeToJsonElement(StreamChunk.ToolCallDelta.serializer(), value)
-            is StreamChunk.BlockEnd -> encodeToJsonElement(StreamChunk.BlockEnd.serializer(), value)
-            is StreamChunk.Usage -> encodeToJsonElement(StreamChunk.Usage.serializer(), value)
-            is StreamChunk.Finish -> encodeToJsonElement(StreamChunk.Finish.serializer(), value)
+            is StreamChunk.BlockStart -> encodeWithType(StreamChunk.BlockStart.serializer(), value)
+            is StreamChunk.TextDelta -> encodeWithType(StreamChunk.TextDelta.serializer(), value)
+            is StreamChunk.ReasoningDelta -> encodeWithType(StreamChunk.ReasoningDelta.serializer(), value)
+            is StreamChunk.ToolCallDelta -> encodeWithType(StreamChunk.ToolCallDelta.serializer(), value)
+            is StreamChunk.BlockEnd -> encodeWithType(StreamChunk.BlockEnd.serializer(), value)
+            is StreamChunk.Usage -> encodeWithType(StreamChunk.Usage.serializer(), value)
+            is StreamChunk.Finish -> encodeWithType(StreamChunk.Finish.serializer(), value)
             is UnknownStreamChunk -> value.raw
         }
         (encoder as JsonEncoder).encodeJsonElement(json)
@@ -207,6 +212,21 @@ object StreamChunkSerializer : KSerializer<StreamChunk> {
         }
     }
 }
+
+/**
+ * The concrete serializers above do not emit the sealed class discriminator on their own.
+ * Re-add it whenever a typed wire value is converted back to JSON; the transcript fold consumes
+ * that JSON and otherwise sees every known block/chunk as an empty `unknown` value.
+ */
+private fun <T> encodeWithType(serializer: SerializationStrategy<T>, value: T): JsonElement =
+    encodeToJsonElement(serializer, value).withType(serializer.descriptor.serialName)
+
+private fun JsonElement.withType(type: String): JsonElement = JsonObject(
+    linkedMapOf<String, JsonElement>().apply {
+        putAll(this@withType.jsonObject)
+        put("type", JsonPrimitive(type))
+    },
+)
 
 /** Serializable provider or transport failure facts; policy decides whether they are retryable. */
 @Serializable
@@ -1259,5 +1279,3 @@ object SessionEventSerializer : KSerializer<SessionEvent> {
         }
     }
 }
-
-
