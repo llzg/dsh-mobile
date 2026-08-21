@@ -8,7 +8,8 @@ checked against.
 
 | DSH Mobile | Harness version | Status |
 |---|---|---|
-| 0.6.0 | 0.1.1-rc.2 | Supported baseline |
+| 0.7.0 | 0.1.1-rc.2 | Supported baseline |
+| 0.6.0 | 0.1.1-rc.2 | |
 | 0.5.0 | 0.1.0-rc.8 | Previous baseline |
 | 0.4.0 | 0.1.0-rc.7 | |
 | 0.1.0 – 0.3.1 | 0.1.0-rc.5 | |
