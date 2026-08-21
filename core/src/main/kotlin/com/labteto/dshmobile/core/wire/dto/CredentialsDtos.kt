@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * Credentials-domain DTOs, ported from `packages/host/apiproxy/src/api/credentials.schema.ts` and
- * `packages/host/apiproxy/src/api/credentials.ts` (v0.1.0-rc.8).
+ * `packages/host/apiproxy/src/api/credentials.ts` (v0.1.1-rc.2).
  */
 
 /** CredentialView entry of `credentials.describe`. */

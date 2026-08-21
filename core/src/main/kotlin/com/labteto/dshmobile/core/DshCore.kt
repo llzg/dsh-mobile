@@ -9,5 +9,5 @@ object DshCore {
      * between releases the client reads the difference off the wire instead, as
      * `DshApiClient.acceptsCommandImages` does.
      */
-    const val PROTOCOL_BASELINE = "0.1.0-rc.8"
+    const val PROTOCOL_BASELINE = "0.1.1-rc.2"
 }

@@ -61,7 +61,7 @@ class ConnectionLoopHandshakeTest {
     private fun describeOk() = RpcHttpResponse(
         200,
         """{"type":"server-response","rpcId":"r","result":{"ok":true,"value":""" +
-            """{"version":"0.1.0-rc.8","cwd":"/tmp","attachedSessions":0,"home":"/home/demo",""" +
+            """{"version":"0.1.1-rc.2","cwd":"/tmp","attachedSessions":0,"home":"/home/demo",""" +
             """"canOpenPath":false}}}""",
     )
 
@@ -166,7 +166,7 @@ class ConnectionLoopHandshakeTest {
         loop.stop()
 
         assertEquals(listOf(HandshakeStep.OPENING_STREAMS, HandshakeStep.DESCRIBING), recorder.steps.take(2))
-        assertEquals("0.1.0-rc.8", recorder.connected.first().version)
+        assertEquals("0.1.1-rc.2", recorder.connected.first().version)
         assertEquals("/home/demo", recorder.connected.first().home)
         assertTrue(recorder.failures.isEmpty())
     }

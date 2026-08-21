@@ -120,7 +120,7 @@ private fun encodeQueryComponent(value: String): String =
     URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
 /**
- * Typed client for the harness unary + downlink wire protocol (v0.1.0-rc.8). Every unary method
+ * Typed client for the harness unary + downlink wire protocol (v0.1.1-rc.2). Every unary method
  * maps to one `POST /api/<method>` (see [rpcMapPath] for the path table) and returns [RpcResult]:
  * business failures arrive as HTTP 200 + `ok: false` and come back as [RpcResult.Err]; carrier
  * failures (non-2xx, transport, or decode) are folded into `RpcResult.Err` with code `internal`.

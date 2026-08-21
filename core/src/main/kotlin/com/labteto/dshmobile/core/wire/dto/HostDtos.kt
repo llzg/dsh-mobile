@@ -4,7 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Host-domain DTOs, ported from `packages/host/apiproxy/src/api/host.schema.ts` (v0.1.0-rc.8).
+ * Host-domain DTOs, ported from `packages/host/apiproxy/src/api/host.schema.ts` (v0.1.1-rc.2).
  * Wire keys are camelCase exactly as the harness emits them.
  */
 

@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonElement
 
 /**
  * Sessions-domain DTOs, ported from `packages/host/apiproxy/src/api/sessions.schema.ts` and
- * `packages/host/apiproxy/src/api/sessions.ts` (v0.1.0-rc.8). Includes the request/response
+ * `packages/host/apiproxy/src/api/sessions.ts` (v0.1.1-rc.2). Includes the request/response
  * values of every `session.*` method (list/search/create/rename/fork/history/models/selectModel/
  * prompt/attachment/updateQueue/cancel) plus the shared model-catalog and attachment shapes.
  */
@@ -236,7 +236,21 @@ data class SessionPromptRequest(
     @SerialName("clientTimeZone") val clientTimeZone: String? = null,
 )
 
-/** Durable image reference returned from the authenticated session lookup. */
+/** A raster size in pixels, as `ImageAttachmentRef.originalDimensions` carries it. */
+@Serializable
+data class ImageDimensions(
+    @SerialName("width") val width: Int,
+    @SerialName("height") val height: Int,
+)
+
+/**
+ * Durable image reference returned from the authenticated session lookup.
+ *
+ * Since harness 0.1.1-rc.2 the host normalizes images on ingest, so [mediaType], [bytes],
+ * [width] and [height] describe the *stored* image, which may be a re-encode of what the
+ * client uploaded — and [attachmentId] is the digest of those normalized bytes, never of
+ * the upload.
+ */
 @Serializable
 data class ImageAttachmentRef(
     /** Opaque storage identifier; never a filesystem path or bearer URL. */
@@ -251,6 +265,8 @@ data class ImageAttachmentRef(
     @SerialName("height") val height: Int,
     /** Optional display name stripped of local path information. */
     @SerialName("name") val name: String? = null,
+    /** Pixel size of the upload before the host normalized it; absent when nothing was scaled. */
+    @SerialName("originalDimensions") val originalDimensions: ImageDimensions? = null,
 )
 
 /** Request payload of `session.attachment`. */

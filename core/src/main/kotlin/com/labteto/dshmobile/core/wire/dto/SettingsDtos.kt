@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonElement
 
 /**
  * Settings-domain DTOs, ported from `packages/host/apiproxy/src/api/settings.schema.ts` and
- * `packages/host/apiproxy/src/api/settings.ts` (v0.1.0-rc.8).
+ * `packages/host/apiproxy/src/api/settings.ts` (v0.1.1-rc.2).
  */
 
 /** One redacted secret slot. */

@@ -66,9 +66,9 @@ class ProjectionDtosTest {
     @Test
     fun `image limits default to the shipped harness bounds when absent`() {
         val limits = decodeFromString<ImageLimitsView>("{}")
-        // 0.1.0-rc.8 lowered the per-image cap from 5MB and added the per-side one.
-        assertEquals(3_670_016L, limits.maxImageBytes)
-        assertEquals(2_000, limits.maxImageDimension)
+        // 0.1.1-rc.2 raised every admission cap once the host began normalizing stored images.
+        assertEquals(20_971_520L, limits.maxImageBytes)
+        assertEquals(8_192, limits.maxImageDimension)
         assertNull(limits.admitImage("image/png", "image/png", 1_000, 100, 100))
     }
 
@@ -81,11 +81,11 @@ class ProjectionDtosTest {
         )
         assertEquals(
             ImageRejection.TOO_LARGE,
-            limits.admitImage("image/png", "image/png", 4_000_000, 100, 100),
+            limits.admitImage("image/png", "image/png", 25_000_000, 100, 100),
         )
         assertEquals(
             ImageRejection.DIMENSION_TOO_LARGE,
-            limits.admitImage("image/png", "image/png", 1_000, 2_400, 100),
+            limits.admitImage("image/png", "image/png", 1_000, 9_000, 100),
         )
         // Bytes that did not decode read as a format problem, which is the host's answer too.
         assertEquals(

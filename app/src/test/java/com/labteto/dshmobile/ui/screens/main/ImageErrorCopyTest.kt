@@ -20,7 +20,8 @@ class ImageErrorCopyTest {
 
     @Test
     fun `a fractional size keeps one place`() {
-        // The shipped per-image cap at harness 0.1.0-rc.8.
+        // The per-image cap harness 0.1.0-rc.8 shipped; 0.1.1-rc.2 raised it to a whole 20MB,
+        // but a host is free to configure a fractional bound, so the rendering stays covered.
         assertEquals("3.5MB", imageSizeText(3_670_016))
     }
 }

@@ -156,11 +156,25 @@ Several facts the UI needs never arrive as an RPC result — they are pushed as
 | `sessionStats` | `{turns, steps, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens}` — `ttftMs` is a **sum** over `ttftSteps`, and throughput must be derived from `decodeTokens / decodeMs` |
 | `tokenUsage` | `{uncachedInputTokens, outputTokens, cacheReadTokens, cacheWriteTokens}` |
 | `contextPressure` / `contextBreakdown` | context-window occupancy, and what fills it |
-| `imageLimits` | `{maxImageBytes, maxImagesPerMessage, maxMessageImageBytes, maxImagePixels, maxImageDimension, mediaTypes}` — the host's own attachment bounds, all of them enforced before upload; `maxImageDimension` is a per-side cap added in harness 0.1.0-rc.8 |
+| `imageLimits` | `{maxImageBytes, maxImagesPerMessage, maxMessageImageBytes, maxImagePixels, maxImageDimension, mediaTypes}` — the host's own attachment bounds, all of them enforced before upload; `maxImageDimension` is a per-side cap added in harness 0.1.0-rc.8, and 0.1.1-rc.2 raised every shipped bound (20MB per image, 200MB per message, 64M pixels, 8192px per side) |
 | `goal`, `todos`, `plan`, `title`, `sessionListMetadata` | the docks and list metadata |
 
 An absent key means the harness composes no such service; clients hide the
 control rather than showing a dead one.
+
+## Image attachments are normalized on ingest
+
+Since harness 0.1.1-rc.2 the host re-encodes stored images down to its own
+working size after admitting them, so the durable reference
+(`{attachmentId, mediaType, bytes, width, height, name?, originalDimensions?}`)
+describes the **stored** image, not the upload: `mediaType` may differ from what
+the client sent, `attachmentId` is the digest of the normalized bytes, and an
+animated GIF flattens to one frame. When scaling occurred, `originalDimensions`
+carries the upload's pixel size. Byte-identical passthrough happens only for a
+clean single-frame image already inside the normalization bounds. The client
+treats `attachmentId` as opaque and renders what `session.attachment` returns,
+so nothing here needs a branch — but nothing may assume the ref echoes the
+upload either.
 
 ## Handshake & liveness
 

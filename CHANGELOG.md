@@ -3,6 +3,41 @@
 All notable changes to DSH Mobile are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/); the project uses SemVer.
 
+## [0.6.0] - 2026-08-21
+
+The baseline moves to harness **0.1.1-rc.2**, and this one is a re-verification
+rather than a migration: across 207 harness commits, not one RPC method, event
+type, projection key or slash command changed shape. What changed is what the
+same shapes carry.
+
+### Changed
+
+- Protocol baseline moves to harness **0.1.1-rc.2**. The wire surface is
+  identical to rc.8; the release raised the shipped image bounds and began
+  normalizing stored images, and one wire-shape change that appeared in
+  0.1.1-rc.1 (`session.create`'s `reuseWorkspaceBlank`) was reverted before
+  rc.2, so nothing of it reaches a client.
+- **The image limits the app assumes when a host publishes none are the new
+  ones**: 20MB per image (up from 3.5MB), 200MB per message (up from 100MB),
+  64M pixels (up from 40M) and 8192px per side (up from 2000px). A host that
+  publishes its own `imageLimits` projection is obeyed exactly as before — the
+  defaults only stand in for one that publishes nothing, and the host's own
+  refusal still gets the last word there.
+- **An attachment reference now describes what the harness stored, not what was
+  uploaded.** 0.1.1-rc.2 re-encodes images on ingest, so the reference's media
+  type can differ from the upload's, its id is the digest of the normalized
+  bytes, and an animated GIF flattens to one frame. The app has always treated
+  the id as opaque and rendered what the host returns, so nothing visible
+  changes — but the reference gained an optional `originalDimensions` carrying
+  the upload's pixel size when the host scaled it, and the client now decodes
+  it.
+- Picking a text-only model on a session that already contains images is no
+  longer refused by the harness. The app never special-cased that refusal, so
+  the relaxation arrives on its own; older hosts still answer
+  `model-unavailable` and the app still surfaces it.
+- The mock harness answers `host.describe` as 0.1.1-rc.2 and publishes the
+  raised image limits.
+
 ## [0.5.0] - 2026-08-20
 
 The baseline moves to harness **0.1.0-rc.8**, and this one is a migration rather

@@ -8,8 +8,9 @@ checked against.
 
 | DSH Mobile | Harness version | Status |
 |---|---|---|
-| 0.5.0 | 0.1.0-rc.8 | Supported baseline |
-| 0.4.0 | 0.1.0-rc.7 | Previous baseline |
+| 0.6.0 | 0.1.1-rc.2 | Supported baseline |
+| 0.5.0 | 0.1.0-rc.8 | Previous baseline |
+| 0.4.0 | 0.1.0-rc.7 | |
 | 0.1.0 – 0.3.1 | 0.1.0-rc.5 | |
 
 The baseline is one constant — `DshCore.PROTOCOL_BASELINE` in
@@ -24,9 +25,14 @@ what would break if it did. The harness releases far more often than this client
 Some of those releases leave the client surface untouched — rc.5 → rc.7 added no
 RPC method, no event type, no projection key and no slash command — and some do
 not: rc.7 → rc.8 added a required field to `host.describe`, a required key to the
-`imageLimits` projection, and a required third argument to `commands/execute`. A
-banner firing on every harness that is not one exact string would be noise on
-every session, and would still be silent about which of those two a release was.
+`imageLimits` projection, and a required third argument to `commands/execute`.
+And a release can change what the wire *means* without changing a single shape:
+rc.8 → 0.1.1-rc.2 touched no RPC schema, event type, projection key or slash
+command, but raised every shipped image bound and began normalizing stored
+images, so the same attachment reference now describes a re-encode rather than
+the upload. A banner firing on every harness that is not one exact string would
+be noise on every session, and would still be silent about which of those a
+release was.
 
 What the app does instead:
 
@@ -55,10 +61,23 @@ What the app does instead:
 - **Slash commands with images need rc.8.** `/goal` and `/plan` accept composer
   attachments there; every other command refuses them, and against an rc.7 host
   so does this client, because that release has no wire slot to carry them.
-- **Image bounds are the host's.** rc.8 lowered the shipped per-image cap from
-  5MB to 3.5MB and added a 2000px per-side cap. The app enforces whatever the
-  `imageLimits` projection says and falls back to rc.8's defaults when a host
-  publishes none, which can refuse a 4MB image an rc.7 host would have taken.
+- **Image bounds are the host's.** 0.1.1-rc.2 raised the shipped admission caps
+  (per-image 3.5MB → 20MB, per-message 100MB → 200MB, 40M → 64M pixels,
+  2000px → 8192px per side) because the host now normalizes stored images down
+  to its own working size after admission. The app enforces whatever the
+  `imageLimits` projection says and falls back to 0.1.1-rc.2's defaults when a
+  host publishes none — so against an older host that publishes no projection,
+  the client may accept an image the host then refuses, and the host's own
+  admission error is what gets shown.
+- **Stored images are normalized from 0.1.1-rc.2.** The attachment reference
+  describes the re-encoded stored image: its `mediaType` can differ from the
+  upload's, `attachmentId` is the digest of the normalized bytes, animated GIFs
+  flatten to one frame, and `originalDimensions` reports the upload's pixel size
+  when scaling occurred. Older hosts echo the upload's facts unchanged; the
+  client treats the reference as opaque either way.
+- **Text-only models are selectable on image-bearing sessions from 0.1.1-rc.2.**
+  Earlier hosts refuse `session.selectModel` with `model-unavailable` there;
+  the client just surfaces whichever answer the host gives.
 
 ## Loopback-only surfaces (by harness design)
 

@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * Workspace-domain DTOs, ported from `packages/host/apiproxy/src/api/workspace.schema.ts` and
- * `packages/host/apiproxy/src/api/workspace.ts` (v0.1.0-rc.8).
+ * `packages/host/apiproxy/src/api/workspace.ts` (v0.1.1-rc.2).
  */
 
 /** One workspace row: the record projection every workspace.* value carries. */

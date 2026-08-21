@@ -369,7 +369,7 @@ class MockHarness(
 
     private fun describeValue(): JsonObject {
         val base = buildJsonObject {
-            put("version", "0.1.0-rc.8")
+            put("version", "0.1.1-rc.2")
             put("cwd", "C:\\demo")
             put("attachedSessions", 0)
             put("home", "C:\\Users\\demo")
@@ -381,15 +381,16 @@ class MockHarness(
     /**
      * The host's own attachment bounds, as the `imageLimits` session projection carries them.
      *
-     * Values are the shipped harness defaults at 0.1.0-rc.8, including the 3.5MB per-image cap
-     * that release lowered from 5MB and the per-side `maxImageDimension` it added.
+     * Values are the shipped harness defaults at 0.1.1-rc.2, which raised every admission cap
+     * (per-image bytes, per-message bytes, pixels, per-side dimension) once the host began
+     * normalizing stored images after admission.
      */
     fun imageLimitsValue(): JsonObject = buildJsonObject {
-        put("maxImageBytes", 3_670_016)
+        put("maxImageBytes", 20_971_520)
         put("maxImagesPerMessage", 20)
-        put("maxMessageImageBytes", 104_857_600)
-        put("maxImagePixels", 40_000_000)
-        put("maxImageDimension", 2_000)
+        put("maxMessageImageBytes", 209_715_200)
+        put("maxImagePixels", 64_000_000)
+        put("maxImageDimension", 8_192)
         putJsonArray("mediaTypes") {
             add("image/png")
             add("image/jpeg")

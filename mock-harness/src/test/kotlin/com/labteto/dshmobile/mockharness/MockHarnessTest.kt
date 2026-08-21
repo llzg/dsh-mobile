@@ -59,7 +59,7 @@ class MockHarnessTest {
         val result = body["result"]!!.jsonObject
         assertTrue(result["ok"]!!.jsonPrimitive.boolean)
         val value = result["value"]!!.jsonObject
-        assertEquals("0.1.0-rc.8", value["version"]!!.jsonPrimitive.content)
+        assertEquals("0.1.1-rc.2", value["version"]!!.jsonPrimitive.content)
         assertEquals("C:\\demo", value["cwd"]!!.jsonPrimitive.content)
         assertEquals(0, value["attachedSessions"]!!.jsonPrimitive.int)
         // Required from 0.1.0-rc.8, and the field the client reads to decide which
@@ -112,9 +112,9 @@ class MockHarnessTest {
     @Test
     fun theImageLimitsProjectionCarriesThePerSideBound() {
         val limits = harness.imageLimitsValue()
-        // 0.1.0-rc.8 added the per-side cap and lowered the per-image byte cap to 3.5MB.
-        assertEquals(2_000, limits["maxImageDimension"]!!.jsonPrimitive.int)
-        assertEquals(3_670_016, limits["maxImageBytes"]!!.jsonPrimitive.int)
+        // 0.1.1-rc.2 raised both bounds once the host began normalizing stored images.
+        assertEquals(8_192, limits["maxImageDimension"]!!.jsonPrimitive.int)
+        assertEquals(20_971_520, limits["maxImageBytes"]!!.jsonPrimitive.int)
     }
 
     @Test

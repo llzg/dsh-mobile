@@ -135,18 +135,19 @@ fun imageRejectionOf(reason: String): ImageRejection = when (reason) {
  * The `imageLimits` projection: the host's own attachment bounds. Defaults mirror the shipped
  * harness so a client that never receives the projection still refuses obviously-oversized images.
  *
- * `maxImageDimension` arrived in harness 0.1.0-rc.8, which also lowered the shipped
- * `maxImageBytes` from 5MB to 3.5MB. Both defaults track the harness rather than this client:
- * an rc.7 host sends no dimension and the default stands in, which is the same bound the
- * deployed model routes apply anyway.
+ * Harness 0.1.1-rc.2 raised the shipped admission caps (per-image 3.5MB → 20MB, per-message
+ * 100MB → 200MB, 40M → 64M pixels, 2000px → 8192px per side) because the host now normalizes
+ * stored images down to its own working size after admission. The defaults track the harness
+ * rather than this client: a host that publishes the projection governs either way, and one
+ * that publishes none gets the baseline release's bounds stood in.
  */
 @Serializable
 data class ImageLimitsView(
-    @SerialName("maxImageBytes") val maxImageBytes: Long = 3_670_016,
+    @SerialName("maxImageBytes") val maxImageBytes: Long = 20_971_520,
     @SerialName("maxImagesPerMessage") val maxImagesPerMessage: Int = 20,
-    @SerialName("maxMessageImageBytes") val maxMessageImageBytes: Long = 104_857_600,
-    @SerialName("maxImagePixels") val maxImagePixels: Long = 40_000_000,
-    @SerialName("maxImageDimension") val maxImageDimension: Int = 2_000,
+    @SerialName("maxMessageImageBytes") val maxMessageImageBytes: Long = 209_715_200,
+    @SerialName("maxImagePixels") val maxImagePixels: Long = 64_000_000,
+    @SerialName("maxImageDimension") val maxImageDimension: Int = 8_192,
     @SerialName("mediaTypes") val mediaTypes: List<String> =
         listOf("image/png", "image/jpeg", "image/webp", "image/gif"),
 ) {
