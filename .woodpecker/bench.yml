@@ -1,0 +1,73 @@
+# bench.yml — manual: full build benchmark on the CURRENT revision (no idempotency skip)
+# COLD=1 clears the ci-cache volumes first → measures cold build; run again without it → warm.
+when:
+  event: [manual]
+  branch: main
+
+clone:
+  git:
+    image: docker.io/woodpeckerci/plugin-git:2.9.2
+    settings:
+      url:
+        from_secret: GITEA_CLONE_URL
+
+steps:
+  bench-setup:
+    image: alpine:3.20
+    volumes:
+      - /volume1:/volume1
+    commands:
+      - echo "BENCH_COLD=$BENCH_COLD revision=$CI_COMMIT_SHA"
+      - if [ "$BENCH_COLD" = "1" ]; then rm -rf /volume1/docker/dsh-mobile/ci-cache; echo "caches cleared (cold)"; fi
+      - mkdir -p /volume1/docker/dsh-mobile/ci-cache
+
+  setup-android-sdk:
+    image: eclipse-temurin:17-jdk
+    environment:
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
+    commands:
+      - sh scripts/ci/setup-android-sdk.sh
+
+  bench-tests:
+    image: eclipse-temurin:17-jdk
+    environment:
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      GRADLE_USER_HOME: /root/.gradle
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
+      - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
+    commands:
+      - echo "BENCH_START_TESTS=$(date +%s%3N)"
+      - ./gradlew --no-daemon :core:test :mock-harness:test :app:testDebugUnitTest --stacktrace
+      - echo "BENCH_END_TESTS=$(date +%s%3N)"
+
+  bench-assemble:
+    image: eclipse-temurin:17-jdk
+    environment:
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      GRADLE_USER_HOME: /root/.gradle
+      DSH_BUILD_REVISION: "$CI_COMMIT_SHA"
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
+      - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
+    commands:
+      - echo "BENCH_START_ASSEMBLE=$(date +%s%3N)"
+      - ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease --stacktrace
+      - echo "BENCH_END_ASSEMBLE=$(date +%s%3N)"
+      - ls -la app/build/outputs/apk/debug app/build/outputs/apk/release
+
+  bench-publish:
+    image: alpine:3.20
+    environment:
+      CI_COMMIT_SHA: "$CI_COMMIT_SHA"
+      CI_BUILD_NUMBER: "$CI_BUILD_NUMBER"
+    volumes:
+      - /volume1:/volume1
+    commands:
+      - sh scripts/ci/publish-artifact.sh
+
