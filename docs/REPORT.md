@@ -98,3 +98,23 @@ END_TO_END_VERIFIED = TBD
 5. **Revision 一致性**校验（Source/CI/Artifact/Running/UI）
 6. **headless UI 实测**（360/390/412/430 宽度）— chrome-headless-shell 下载经代理过慢，后台继续
 
+
+## UI 实测（headless chrome 152.0.7977.42，2026-08-22）
+
+SECONDARY 插件实例（DSH_HOME 隔离测试，端口 3090，dsh 0.1.1-rc.2）：
+
+| 宽度 | 横向溢出 | scrollWidth==innerWidth | data-mobile-nav | console errors |
+|---|---|---|---|---|
+| 360px | NO | YES (360==360) | present | 0 |
+| 390px | NO | YES (390==390) | present | 0 |
+| 412px | NO | YES (412==412) | present | 0 |
+| 430px | NO | YES (430==430) | present | 0 |
+
+插件移动壳结构（390px 实测 DOM）：data-mobile-nav="frame" + data-sidebar-collapsed=true，
+grid-template-columns: 56px minmax(0,1fr) 0px（图标 rail + 主内容 + 收起的详情列）；
+含 drawer-actions / explorer / session-log / fab 与按钮：Open sidebar / New session / Add workspace /
+Search sessions / Files / Session log / Choose workspace（触屏优先）。
+
+对照：生产实例 3080（未装插件）390px 同样无横向溢出（原生 UI 本身可折叠）；headless 下无字体配置，
+正文 innerText 为空属环境限制（DOM 正常渲染 33KB/70 div，无 console error）。
+
