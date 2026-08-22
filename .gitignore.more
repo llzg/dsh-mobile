@@ -3,3 +3,8 @@ artifacts/
 *.apk
 build-info.json
 deploy-status.json
+# local tooling caches
+.browser-cache/
+.npm-cache/
+.gradle-smoke/
+.jdk/
