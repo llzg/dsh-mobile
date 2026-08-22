@@ -13,3 +13,13 @@
 keystore.properties
 /capture-output/
 node_modules/
+
+# local tooling caches
+.browser-cache/
+.npm-cache/
+.gradle-smoke/
+.jdk/
+artifacts/
+*.apk
+build-info.json
+deploy-status.json
