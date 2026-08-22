@@ -12,17 +12,13 @@ clone:
       # clone from the Gitea LAN mirror (secret-injected URL, no leak into git)
       url:
         from_secret: GITEA_CLONE_URL
-    environment:
-      HTTP_PROXY: http://192.168.5.36:7893
-      HTTPS_PROXY: http://192.168.5.36:7893
-      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
 
 steps:
   release-check:
     image: alpine:3.20
     commands:
       - echo "release pipeline repo=$CI_REPO sha=$CI_COMMIT_SHA branch=$CI_COMMIT_BRANCH"
-      - echo "secrets: GITEA_TOKEN=$([ -n "$GITEA_TOKEN" ] && echo SET || echo missing) KEYSTORE=$([ -n "$DSH_KEYSTORE" ] && echo SET || echo missing)"
+      - if [ -n "$GITEA_TOKEN" ]; then GT=SET; else GT=missing; fi; if [ -n "$DSH_KEYSTORE" ]; then KS=SET; else KS=missing; fi; echo "secrets GITEA_TOKEN=$GT KEYSTORE=$KS"
 
   setup-android-sdk:
     image: eclipse-temurin:17-jdk

@@ -1,0 +1,16 @@
+# mirror-sync pipeline — cron: keep the Gitea LAN mirror in sync with GitHub
+# (host-side systemd timer covers invoice-agent-ui only; this uses the same
+# Gitea mirror-sync API via the existing Woodpecker cron mechanism)
+when:
+  event: [cron, manual]
+
+steps:
+  sync:
+    image: alpine:3.20
+    environment:
+      GITEA_ADMIN_TOKEN:
+        from_secret: GITEA_ADMIN_TOKEN
+    commands:
+      - apk add --no-cache curl >/dev/null 2>&1
+      - curl -sf -X POST -H "Authorization:token $GITEA_ADMIN_TOKEN" "http://192.168.5.35:3000/api/v1/repos/llzg/dsh-mobile/mirror-sync" && echo "MIRROR_SYNC_OK" || echo "MIRROR_SYNC_FAIL"
+

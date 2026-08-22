@@ -11,10 +11,6 @@ clone:
       # clone from the Gitea LAN mirror (secret-injected URL, no leak into git)
       url:
         from_secret: GITEA_CLONE_URL
-    environment:
-      HTTP_PROXY: http://192.168.5.36:7893
-      HTTPS_PROXY: http://192.168.5.36:7893
-      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
 
 steps:
   env-check:
