@@ -26,7 +26,7 @@ steps:
       - /volume1:/volume1
     commands:
       - TAG=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
-      - if ls /volume1/docker/dsh-mobile/releases/dsh-mobile-*+${TAG}-debug.apk >/dev/null 2>&1; then echo "IDEMPOTENT_SKIP artifact-exists"; touch .ci-skip; fi
+      - if ls /volume1/docker/dsh-mobile/releases/dsh-mobile-*+${TAG}-*.apk >/dev/null 2>&1; then echo "IDEMPOTENT_SKIP artifact-exists"; touch .ci-skip; fi
       - exit 0
 
   setup-java:

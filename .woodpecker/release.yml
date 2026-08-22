@@ -65,8 +65,6 @@ steps:
       GITEA_TOKEN:
         from_secret: GITEA_TOKEN
       GITEA_URL: http://192.168.5.35:3000
-      CI_COMMIT_SHA: "$CI_COMMIT_SHA"
-      CI_BUILD_NUMBER: "$CI_BUILD_NUMBER"
     volumes:
       - /volume1:/volume1
     commands:
