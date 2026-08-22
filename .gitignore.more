@@ -1,0 +1,5 @@
+# local CD artifacts
+artifacts/
+*.apk
+build-info.json
+deploy-status.json
