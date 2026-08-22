@@ -26,7 +26,7 @@ cd "$REL"
 sha256sum dsh-mobile-*.apk latest.apk 2>/dev/null > SHA256SUMS.txt || true
 
 # deploy status (real CD data — Running Revision = this release)
-RELEASE_NAME="v${VER}-build${CI_BUILD_NUMBER:-0}"
+RELEASE_NAME="v${VER}-build${CI_BUILD_NUMBER:-0}-${TAG}"
 DL="$GITEA_URL/llzg/dsh-mobile/releases/download/$RELEASE_NAME/dsh-mobile-${VER}+${TAG}.apk"
 printf '{"runningRevision":"%s","shortRevision":"%s","version":"%s","buildNumber":"%s","deployedAt":"%s","health":"%s","downloadUrl":"%s","artifactStore":"/volume1/docker/dsh-mobile/releases"}\n' \
   "$REV" "$TAG" "$VER" "${CI_BUILD_NUMBER:-0}" "$(date -u +%FT%TZ)" "pending" "$DL" > deploy-status.json
@@ -39,7 +39,7 @@ if [ -n "$GITEA_TOKEN" ] && [ -f "$REL/dsh-mobile-${VER}+${TAG}.apk" ]; then
     -H 'content-type: application/json' -d "{\"tag_name\":\"$RELEASE_NAME\",\"name\":\"$RELEASE_NAME\",\"draft\":false}" >/tmp/release.json || echo "[cd] gitea release create failed"
   RID=$(jq -r '.id // empty' /tmp/release.json 2>/dev/null || echo "")
   if [ -n "$RID" ]; then
-    curl -sf -H "Authorization: token $GITEA_TOKEN" -X POST "$GITEA_URL/api/v1/repos/llzg/dsh-mobile/releases/$RID/assets?name=dsh-mobile-${VER}+${TAG}.apk" -H 'content-type: application/vnd.android.package-archive' --data-binary @"$REL/dsh-mobile-${VER}+${TAG}.apk" || echo "[cd] asset upload failed"
+    curl -sf -H "Authorization: token $GITEA_TOKEN" -X POST "$GITEA_URL/api/v1/repos/llzg/dsh-mobile/releases/$RID/assets?name=dsh-mobile-${VER}%2B${TAG}.apk" -H 'content-type: application/vnd.android.package-archive' --data-binary @"$REL/dsh-mobile-${VER}+${TAG}.apk" || echo "[cd] asset upload failed"
     echo "[cd] gitea release $RELEASE_NAME published"
   fi
 fi
