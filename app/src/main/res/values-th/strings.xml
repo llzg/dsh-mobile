@@ -226,6 +226,7 @@
     <string name="settings_background">คงการเชื่อมต่อในเบื้องหลัง</string>
     <string name="settings_about">เกี่ยวกับ</string>
     <string name="settings_about_version">เวอร์ชันแอป %1$s · โปรโตคอล %2$s</string>
+    <string name="settings_about_revision">บิลด์รีวิชัน %1$s</string>
     <string name="settings_host_info">ข้อมูลโฮสต์</string>
     <string name="notif_channel_completions">ความสำเร็จ</string>
     <string name="notif_channel_action">ต้องมีการดำเนินการของคุณ</string>

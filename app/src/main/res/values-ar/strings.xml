@@ -226,6 +226,7 @@
     <string name="settings_background">البقاء متصلًا في الخلفية</string>
     <string name="settings_about">حول</string>
     <string name="settings_about_version">إصدار التطبيق %1$s · البروتوكول %2$s</string>
+    <string name="settings_about_revision">إصدار البناء %1$s</string>
     <string name="settings_host_info">معلومات المضيف</string>
     <string name="notif_channel_completions">الاكتمالات</string>
     <string name="notif_channel_action">يتطلب إجراءك</string>

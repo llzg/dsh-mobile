@@ -226,6 +226,7 @@
     <string name="settings_background">پس منظر میں منسلک رہیں</string>
     <string name="settings_about">ایپ کے بارے میں</string>
     <string name="settings_about_version">ایپ ورژن %1$s · پروٹوکول %2$s</string>
+    <string name="settings_about_revision">بلڈ ریویژن %1$s</string>
     <string name="settings_host_info">میزبان کی معلومات</string>
     <string name="notif_channel_completions">مکمل ہونے کی اطلاعات</string>
     <string name="notif_channel_action">آپ کی کارروائی درکار ہے</string>

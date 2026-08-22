@@ -226,6 +226,7 @@
     <string name="settings_background">बैकग्राउंड में कनेक्टेड रहें</string>
     <string name="settings_about">ऐप के बारे में</string>
     <string name="settings_about_version">ऐप संस्करण %1$s · प्रोटोकॉल %2$s</string>
+    <string name="settings_about_revision">बिल्ड रिवीज़न %1$s</string>
     <string name="settings_host_info">होस्ट जानकारी</string>
     <string name="notif_channel_completions">पूर्णताएं</string>
     <string name="notif_channel_action">आपकी कार्रवाई चाहिए</string>

@@ -226,6 +226,7 @@
     <string name="settings_background">ব্যাকগ্রাউন্ডে সংযুক্ত থাকুন</string>
     <string name="settings_about">সম্পর্কে</string>
     <string name="settings_about_version">অ্যাপ সংস্করণ %1$s · প্রোটোকল %2$s</string>
+    <string name="settings_about_revision">বিল্ড রিভিশন %1$s</string>
     <string name="settings_host_info">হোস্ট তথ্য</string>
     <string name="notif_channel_completions">সম্পন্ন হওয়া</string>
     <string name="notif_channel_action">আপনার পদক্ষেপ প্রয়োজন</string>

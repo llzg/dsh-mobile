@@ -226,6 +226,7 @@
     <string name="settings_background">Rester connecté en arrière-plan</string>
     <string name="settings_about">À propos</string>
     <string name="settings_about_version">Version de l’app %1$s · protocole %2$s</string>
+    <string name="settings_about_revision">Révision de build %1$s</string>
     <string name="settings_host_info">Informations sur l’hôte</string>
     <string name="notif_channel_completions">Achèvements</string>
     <string name="notif_channel_action">Votre action est requise</string>

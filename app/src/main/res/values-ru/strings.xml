@@ -226,6 +226,7 @@
     <string name="settings_background">Оставаться на связи в фоне</string>
     <string name="settings_about">О приложении</string>
     <string name="settings_about_version">Версия приложения %1$s · протокол %2$s</string>
+    <string name="settings_about_revision">Версия сборки %1$s</string>
     <string name="settings_host_info">Информация о хосте</string>
     <string name="notif_channel_completions">Завершения</string>
     <string name="notif_channel_action">Требуется ваше действие</string>
