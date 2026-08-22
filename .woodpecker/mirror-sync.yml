@@ -14,3 +14,21 @@ steps:
       - apk add --no-cache curl >/dev/null 2>&1
       - curl -sf -X POST -H "Authorization:token $GITEA_ADMIN_TOKEN" "http://192.168.5.35:3000/api/v1/repos/llzg/dsh-mobile/mirror-sync" && echo "MIRROR_SYNC_OK" || echo "MIRROR_SYNC_FAIL"
 
+  # Trigger governance: create exactly ONE verify pipeline per NEW commit (no flood).
+  # Uses ci-trigger.sh (flock + disk guard + flood guard + state-file idempotency).
+  trigger:
+    image: alpine:3.20
+    environment:
+      WOODPECKER_URL: http://192.168.5.16:8010
+      WOODPECKER_TOKEN:
+        from_secret: WOODPECKER_TOKEN
+      GITEA_URL: http://192.168.5.35:3000
+      GITEA_TOKEN:
+        from_secret: GITEA_ADMIN_TOKEN
+      STATE_DIR: /var/lib/ci-trigger
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/guard:/var/lib/ci-trigger
+    commands:
+      - apk add --no-cache util-linux curl >/dev/null 2>&1 || true
+      - sh scripts/ci/ci-trigger.sh llzg/dsh-mobile
+
