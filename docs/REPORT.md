@@ -75,3 +75,26 @@ LOCAL_CD_PASS = TBD
 REVISION_CONSISTENCY_PASS = TBD
 END_TO_END_VERIFIED = TBD
 
+
+## 已验证（2026-08-22，本机实测）
+
+- **协议级 E2E：30/30 PASS**（node scripts/verify-protocol.mjs http://192.168.5.16:3081）
+  - session.list/create/history/prompt/cancel、workspace.list、llm.providers/models、skill.list、subagent.list、
+    host.describe、session.models（deepseek-v4-flash）、WS mux（turn/start、text delta、session/event）、回复落盘
+- **/api/respond** 路由正常：{"accepted":false,"reason":"not-pending"}（无待批时）/ bad-response（非法载荷）
+- **session.export** 200：1.2MB zip（session.jsonl）
+- **SECONDARY 插件隔离实例**（DSH_HOME=/root/nas_docker/dsh-test，端口 3090）：
+  - boot 无错误；client 模块 @dsh-external/dsh-mobile-nav 注册并下发（/plugins/.../client.js 200）
+  - 同一协议在插件实例上 28/30（2 项为隔离环境差异：workspace 为空、短回复无 delta 帧）→ 插件不破坏 API
+- **生产 dsh 未改动**：web 3080/3081/3082 全部 200；cordis.patch.yml 时间戳/内容未变；本机 API 正常
+- **候选审计**：10 个仓库全部 clone + 源码检查（docs/AUDIT.md）
+
+## 待完成（依赖凭证 / 网络）
+
+1. **CI/CD 接入**：GITEA_TOKEN + WOODPECKER_TOKEN（+可选 GITHUB_TOKEN）→ scripts/ci/ci-setup.sh
+2. **真实 commit → Gitea mirror → Woodpecker 全链路** + T0..T7 + 延迟表（docs/CI-CD.md）
+3. **APK 构建**（Woodpecker agent：JDK17+SDK cache）→ cold/warm 时间
+4. **CD**：APK artifact + latest.apk + Gitea release + deploy-status + 状态页
+5. **Revision 一致性**校验（Source/CI/Artifact/Running/UI）
+6. **headless UI 实测**（360/390/412/430 宽度）— chrome-headless-shell 下载经代理过慢，后台继续
+
