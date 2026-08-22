@@ -64,6 +64,7 @@ steps:
       ANDROID_HOME: /opt/android-sdk
       ANDROID_SDK_ROOT: /opt/android-sdk
       GRADLE_USER_HOME: /root/.gradle
+      JAVA_TOOL_OPTIONS: "-Dhttp.proxyHost=192.168.5.36 -Dhttp.proxyPort=7893 -Dhttps.proxyHost=192.168.5.36 -Dhttps.proxyPort=7893 -Dhttp.nonProxyHosts=192.168.5.*|127.0.0.1|localhost"
     volumes:
       - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
       - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
@@ -80,6 +81,7 @@ steps:
       ANDROID_HOME: /opt/android-sdk
       ANDROID_SDK_ROOT: /opt/android-sdk
       GRADLE_USER_HOME: /root/.gradle
+      JAVA_TOOL_OPTIONS: "-Dhttp.proxyHost=192.168.5.36 -Dhttp.proxyPort=7893 -Dhttps.proxyHost=192.168.5.36 -Dhttps.proxyPort=7893 -Dhttp.nonProxyHosts=192.168.5.*|127.0.0.1|localhost"
     volumes:
       - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
       - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
@@ -96,6 +98,7 @@ steps:
       ANDROID_HOME: /opt/android-sdk
       ANDROID_SDK_ROOT: /opt/android-sdk
       GRADLE_USER_HOME: /root/.gradle
+      JAVA_TOOL_OPTIONS: "-Dhttp.proxyHost=192.168.5.36 -Dhttp.proxyPort=7893 -Dhttps.proxyHost=192.168.5.36 -Dhttps.proxyPort=7893 -Dhttp.nonProxyHosts=192.168.5.*|127.0.0.1|localhost"
       DSH_BUILD_REVISION: "$CI_COMMIT_SHA"
     volumes:
       - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
