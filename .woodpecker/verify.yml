@@ -7,6 +7,10 @@ when:
 clone:
   git:
     image: docker.io/woodpeckerci/plugin-git:2.9.2
+    settings:
+      # clone from the Gitea LAN mirror (secret-injected URL, no leak into git)
+      url:
+        from_secret: GITEA_CLONE_URL
     environment:
       HTTP_PROXY: http://192.168.5.36:7893
       HTTPS_PROXY: http://192.168.5.36:7893
@@ -26,7 +30,7 @@ steps:
       - /volume1:/volume1
     commands:
       - TAG=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
-      - if [ -f "/volume1/docker/dsh-mobile/releases/dsh-mobile-${TAG}.apk" ]; then echo "IDEMPOTENT_SKIP artifact-exists"; touch .ci-skip; fi
+      - if ls /volume1/docker/dsh-mobile/releases/dsh-mobile-*+${TAG}-debug.apk >/dev/null 2>&1; then echo "IDEMPOTENT_SKIP artifact-exists"; touch .ci-skip; fi
       - exit 0
 
   setup-java:
@@ -96,6 +100,7 @@ steps:
       ANDROID_HOME: /opt/android-sdk
       ANDROID_SDK_ROOT: /opt/android-sdk
       GRADLE_USER_HOME: /root/.gradle
+      DSH_BUILD_REVISION: "$CI_COMMIT_SHA"
     volumes:
       - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
       - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle

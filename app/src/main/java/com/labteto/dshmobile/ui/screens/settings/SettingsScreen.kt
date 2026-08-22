@@ -227,6 +227,14 @@ fun SettingsScreen(onClose: () -> Unit, viewModel: SettingsViewModel = hiltViewM
                         style = DsType.small13,
                         color = colors.labelTertiary,
                     )
+                    Text(
+                        stringResource(
+                            R.string.settings_about_revision,
+                            BuildConfig.BUILD_REVISION,
+                        ),
+                        style = DsType.small13,
+                        color = colors.labelTertiary,
+                    )
                 }
 
                 Spacer(Modifier.height(DsSpacing.xlarge))

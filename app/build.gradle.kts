@@ -29,6 +29,9 @@ val dshVersionCode: Int = dshVersionName
     }
     .coerceAtLeast(1)
 
+// dsh-mobile: build revision injected by CI (DSH_BUILD_REVISION=git SHA); fallback "dev"
+val dshBuildRevision: String = System.getenv("DSH_BUILD_REVISION")?.takeIf { it.isNotBlank() } ?: "dev"
+
 android {
     namespace = "com.labteto.dshmobile"
     compileSdk = 35
@@ -39,6 +42,7 @@ android {
         targetSdk = 35
         versionCode = dshVersionCode
         versionName = dshVersionName
+        buildConfigField("String", "BUILD_REVISION", "\"$dshBuildRevision\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }

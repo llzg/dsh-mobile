@@ -278,6 +278,7 @@
     <string name="settings_background">Keep connected in background</string>
     <string name="settings_about">About</string>
     <string name="settings_about_version">App version %1$s · protocol %2$s</string>
+    <string name="settings_about_revision">Build revision %1$s</string>
     <string name="settings_host_info">Host information</string>
     <string name="settings_connection">Connection</string>
     <string name="settings_connection_status">Status</string>
