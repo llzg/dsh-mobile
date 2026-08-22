@@ -1,0 +1,115 @@
+# dsh-mobile verify pipeline — local Woodpecker CI (DXP6800 agent)
+# Trigger: push / cron (existing GitHub→Gitea mirror→cron mechanism, clone from Gitea LAN mirror)
+# Artifact store: /volume1/docker/dsh-mobile/releases (NAS), build-info-<sha7>.json (real CI data)
+when:
+  event: [push, pull_request, cron, manual]
+
+clone:
+  git:
+    image: docker.io/woodpeckerci/plugin-git:2.9.2
+    environment:
+      HTTP_PROXY: http://192.168.5.36:7893
+      HTTPS_PROXY: http://192.168.5.36:7893
+      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
+
+steps:
+  env-check:
+    image: alpine:3.20
+    commands:
+      - echo "repo=$CI_REPO sha=$CI_COMMIT_SHA branch=$CI_COMMIT_BRANCH event=$CI_BUILD_EVENT"
+      - uname -m
+
+  # Trigger-level idempotency: same SHA already built → skip (artifact exists in store)
+  idempotency-check:
+    image: alpine:3.20
+    volumes:
+      - /volume1:/volume1
+    commands:
+      - TAG=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
+      - if [ -f "/volume1/docker/dsh-mobile/releases/dsh-mobile-${TAG}.apk" ]; then echo "IDEMPOTENT_SKIP artifact-exists"; touch .ci-skip; fi
+      - exit 0
+
+  setup-java:
+    image: eclipse-temurin:17-jdk
+    environment:
+      HTTP_PROXY: http://192.168.5.36:7893
+      HTTPS_PROXY: http://192.168.5.36:7893
+      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
+    commands:
+      - if [ -f .ci-skip ]; then echo "skip setup (already verified)"; exit 0; fi
+      - java -version
+      - apt-get update -qq && apt-get install -y -qq unzip curl >/dev/null 2>&1
+      - echo "java ready"
+
+  setup-android-sdk:
+    image: eclipse-temurin:17-jdk
+    environment:
+      HTTP_PROXY: http://192.168.5.36:7893
+      HTTPS_PROXY: http://192.168.5.36:7893
+      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
+    commands:
+      - if [ -f .ci-skip ]; then echo "skip sdk (already verified)"; exit 0; fi
+      - sh scripts/ci/setup-android-sdk.sh
+
+  unit-tests:
+    image: eclipse-temurin:17-jdk
+    environment:
+      HTTP_PROXY: http://192.168.5.36:7893
+      HTTPS_PROXY: http://192.168.5.36:7893
+      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      GRADLE_USER_HOME: /root/.gradle
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
+      - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
+    commands:
+      - if [ -f .ci-skip ]; then echo "skip tests (already verified)"; exit 0; fi
+      - ./gradlew --no-daemon :core:test :mock-harness:test :app:testDebugUnitTest --stacktrace
+
+  lint:
+    image: eclipse-temurin:17-jdk
+    environment:
+      HTTP_PROXY: http://192.168.5.36:7893
+      HTTPS_PROXY: http://192.168.5.36:7893
+      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      GRADLE_USER_HOME: /root/.gradle
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
+      - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
+    commands:
+      - if [ -f .ci-skip ]; then echo "skip lint (already verified)"; exit 0; fi
+      - ./gradlew --no-daemon :app:lintDebug --stacktrace
+
+  assemble:
+    image: eclipse-temurin:17-jdk
+    environment:
+      HTTP_PROXY: http://192.168.5.36:7893
+      HTTPS_PROXY: http://192.168.5.36:7893
+      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      GRADLE_USER_HOME: /root/.gradle
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
+      - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
+    commands:
+      - if [ -f .ci-skip ]; then echo "skip assemble (already verified)"; exit 0; fi
+      - ./gradlew --no-daemon :app:assembleDebug --stacktrace
+      - ./gradlew --no-daemon :app:assembleRelease --stacktrace
+      - ls -la app/build/outputs/apk/debug app/build/outputs/apk/release
+
+  publish-artifact:
+    image: alpine:3.20
+    volumes:
+      - /volume1:/volume1
+    commands:
+      - if [ -f .ci-skip ]; then echo "skip publish (already verified)"; exit 0; fi
+      - sh scripts/ci/publish-artifact.sh
+

@@ -1,0 +1,73 @@
+# dsh-mobile release/CD pipeline — manual event (approval gate)
+# Produces: signed release APK (if keystore secrets) + latest.apk + deploy-status.json
+# + Gitea release asset (if GITEA_TOKEN secret present). Healthcheck via download URL.
+when:
+  event: [manual]
+  branch: main
+
+clone:
+  git:
+    image: docker.io/woodpeckerci/plugin-git:2.9.2
+    environment:
+      HTTP_PROXY: http://192.168.5.36:7893
+      HTTPS_PROXY: http://192.168.5.36:7893
+      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
+
+steps:
+  release-check:
+    image: alpine:3.20
+    commands:
+      - echo "release pipeline repo=$CI_REPO sha=$CI_COMMIT_SHA branch=$CI_COMMIT_BRANCH"
+      - echo "secrets: GITEA_TOKEN=$([ -n "$GITEA_TOKEN" ] && echo SET || echo missing) KEYSTORE=$([ -n "$DSH_KEYSTORE" ] && echo SET || echo missing)"
+
+  setup-android-sdk:
+    image: eclipse-temurin:17-jdk
+    environment:
+      HTTP_PROXY: http://192.168.5.36:7893
+      HTTPS_PROXY: http://192.168.5.36:7893
+      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
+    commands:
+      - sh scripts/ci/setup-android-sdk.sh
+
+  assemble-release:
+    image: eclipse-temurin:17-jdk
+    environment:
+      HTTP_PROXY: http://192.168.5.36:7893
+      HTTPS_PROXY: http://192.168.5.36:7893
+      NO_PROXY: localhost,127.0.0.1,192.168.5.0/24
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      GRADLE_USER_HOME: /root/.gradle
+      DSH_KEYSTORE:
+        from_secret: DSH_KEYSTORE
+      DSH_KEYSTORE_PASSWORD:
+        from_secret: DSH_KEYSTORE_PASSWORD
+      DSH_KEY_ALIAS:
+        from_secret: DSH_KEY_ALIAS
+      DSH_KEY_PASSWORD:
+        from_secret: DSH_KEY_PASSWORD
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
+      - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
+    commands:
+      - ./gradlew --no-daemon :app:assembleRelease --stacktrace
+      - ls -la app/build/outputs/apk/release/
+
+  publish-cd:
+    image: alpine:3.20
+    environment:
+      GITEA_TOKEN:
+        from_secret: GITEA_TOKEN
+      GITEA_URL: http://192.168.5.35:3000
+      CI_COMMIT_SHA: "$CI_COMMIT_SHA"
+      CI_BUILD_NUMBER: "$CI_BUILD_NUMBER"
+    volumes:
+      - /volume1:/volume1
+    commands:
+      - apk add --no-cache curl jq >/dev/null 2>&1
+      - sh scripts/ci/cd-publish.sh
+

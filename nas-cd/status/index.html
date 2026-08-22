@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSH Mobile · CI/CD</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--fg:#e2e8f0;--ok:#22c55e;--bad:#ef4444;--acc:#38bdf8}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,sans-serif;padding:16px;max-width:430px;margin:0 auto}
+h1{font-size:18px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}
+.sub{color:#94a3b8;font-size:12px;margin-bottom:16px}
+.card{background:var(--card);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #334155}
+.row:last-child{border-bottom:none}
+.k{color:#94a3b8;font-size:13px}
+.v{font-family:ui-monospace,monospace;font-size:13px;word-break:break-all;text-align:right}
+.v.ok{color:var(--ok)}.v.bad{color:var(--bad)}
+a.v{color:var(--acc);text-decoration:none}
+.lat{font-size:11px;color:#64748b;text-align:center;margin-top:12px}
+</style>
+</head>
+<body>
+<h1><span class="dot" id="healthDot"></span>DSH Mobile · CI/CD</h1>
+<div class="sub" id="sub">读取 NAS 上真实 CI/CD 状态</div>
+<div class="card" id="buildCard">
+  <div class="row"><span class="k">Commit</span><span class="v" id="revision">-</span></div>
+  <div class="row"><span class="k">Build</span><span class="v" id="buildStatus">-</span></div>
+  <div class="row"><span class="k">Version</span><span class="v" id="version">-</span></div>
+  <div class="row"><span class="k">Build Number</span><span class="v" id="buildNumber">-</span></div>
+  <div class="row"><span class="k">Built At</span><span class="v" id="builtAt">-</span></div>
+</div>
+<div class="card" id="deployCard">
+  <div class="row"><span class="k">Deploy</span><span class="v" id="deployStatus">-</span></div>
+  <div class="row"><span class="k">Running</span><span class="v" id="runningRevision">-</span></div>
+  <div class="row"><span class="k">Deployed At</span><span class="v" id="deployedAt">-</span></div>
+  <div class="row"><span class="k">APK</span><a class="v" id="downloadUrl" href="#">-</a></div>
+</div>
+<div class="card"><div class="row"><span class="k">GitHub</span><a class="v" href="https://github.com/llzg/dsh-mobile">github.com/llzg/dsh-mobile</a></div>
+<div class="row"><span class="k">Gitea</span><a class="v" href="http://192.168.5.35:3000/llzg/dsh-mobile">192.168.5.35:3000</a></div>
+<div class="row"><span class="k">Woodpecker</span><a class="v" href="http://192.168.5.16:8010">192.168.5.16:8010</a></div></div>
+<div class="lat">数据来源：releases/build-info.json · releases/deploy-status.json（真实 CI/CD 产物）</div>
+<script>
+async function load(){
+  const set=(id,val,cls)=>{const el=document.getElementById(id);if(el){el.textContent=val;if(cls)el.className='v '+cls}};
+  try{
+    const b=await (await fetch('build-info.json',{cache:'no-store'})).json();
+    set('revision',b.shortRevision||b.revision,'');
+    set('version',b.version||'-','');
+    set('buildNumber',String(b.buildNumber??'-'),'');
+    set('builtAt',b.builtAt||'-','');
+    set('buildStatus',b.status==='built'?'✓ PASS':'?','ok');
+    set('buildCard','');
+  }catch(e){set('buildStatus','数据不可用','bad');set('sub','build-info.json 读取失败','');}
+  try{
+    const d=await (await fetch('deploy-status.json',{cache:'no-store'})).json();
+    set('runningRevision',d.shortRevision||d.runningRevision,'');
+    set('deployedAt',d.deployedAt||'-','');
+    set('deployStatus',d.health==='ok'?'✓ PASS':(d.health||'?'),d.health==='ok'?'ok':'bad');
+    const dl=document.getElementById('downloadUrl');
+    if(dl&&d.downloadUrl){dl.href=d.downloadUrl;dl.textContent=d.shortRevision+'.apk'}
+    document.getElementById('healthDot').className='dot '+(d.health==='ok'?'ok':'bad');
+  }catch(e){set('deployStatus','数据不可用','bad');}
+}
+load();
+</script>
+</body>
+</html>
+
