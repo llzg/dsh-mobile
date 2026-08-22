@@ -55,6 +55,7 @@ steps:
       - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
       - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
     commands:
+      - export DSH_BUILD_REVISION="$CI_COMMIT_SHA"
       - ./gradlew --no-daemon :app:assembleRelease --stacktrace
       - ls -la app/build/outputs/apk/release/
 
