@@ -56,19 +56,60 @@ steps:
       JAVA_TOOL_OPTIONS: "-Dhttp.proxyHost=192.168.5.36 -Dhttp.proxyPort=7893 -Dhttps.proxyHost=192.168.5.36 -Dhttps.proxyPort=7893 -Dhttp.nonProxyHosts=192.168.5.*|127.0.0.1|localhost"
       DSH_KEYSTORE:
         from_secret: DSH_KEYSTORE
+      DSH_KEYSTORE_BASE64:
+        from_secret: DSH_KEYSTORE_BASE64
       DSH_KEYSTORE_PASSWORD:
         from_secret: DSH_KEYSTORE_PASSWORD
       DSH_KEY_ALIAS:
         from_secret: DSH_KEY_ALIAS
       DSH_KEY_PASSWORD:
         from_secret: DSH_KEY_PASSWORD
+      DSH_VERSION_NAME: "0.8.1"
     volumes:
       - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
       - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
     commands:
-      - export DSH_BUILD_REVISION="$CI_COMMIT_SHA"
-      - ./gradlew --no-daemon :app:assembleRelease --stacktrace
-      - ls -la app/build/outputs/apk/release/
+      - |
+        set -e
+        export DSH_BUILD_REVISION="$CI_COMMIT_SHA"
+        # decode keystore (deployment-only secret) to a temp file; never echo contents
+        if [ -n "$DSH_KEYSTORE_BASE64" ]; then
+          echo "$DSH_KEYSTORE_BASE64" | base64 -d > /tmp/dsh-mobile-release.jks
+          chmod 600 /tmp/dsh-mobile-release.jks
+          export DSH_KEYSTORE=/tmp/dsh-mobile-release.jks
+        fi
+        # PRODUCTION signing gate: no keystore -> FAIL (never silently fall back to unsigned)
+        if [ -z "$CI_PIPELINE_DEPLOY_TARGET" ] || [ "$CI_PIPELINE_DEPLOY_TARGET" = "production" ]; then
+          if [ ! -f "$DSH_KEYSTORE" ] || [ -z "$DSH_KEYSTORE_PASSWORD" ] || [ -z "$DSH_KEY_ALIAS" ] || [ -z "$DSH_KEY_PASSWORD" ]; then
+            echo "FAIL_SIGNING_REQUIRED production-without-keystore"
+            exit 1
+          fi
+          echo "SIGNING_GATE production keystore=present"
+        else
+          echo "SIGNING_GATE target=$CI_PIPELINE_DEPLOY_TARGET unsigned-allowed"
+        fi
+        ./gradlew --no-daemon :app:assembleRelease --stacktrace
+        ls -la app/build/outputs/apk/release/
+        rm -f /tmp/dsh-mobile-release.jks
+        echo "ASSEMBLE_RELEASE_DONE"
+
+  verify-signature:
+    image: eclipse-temurin:17-jdk
+    environment:
+      ANDROID_HOME: /opt/android-sdk
+      ANDROID_SDK_ROOT: /opt/android-sdk
+    volumes:
+      - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
+    commands:
+      - |
+        set -e
+        APKSIGNER=$(ls /opt/android-sdk/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+        [ -n "$APKSIGNER" ] || { echo "APKSIGNER_MISSING"; exit 1; }
+        APK=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | grep -v unsigned | head -1 || true)
+        [ -n "$APK" ] && [ -f "$APK" ] || { echo "SIGNED_APK_MISSING"; exit 1; }
+        echo "=== apksigner verify: $APK ==="
+        "$APKSIGNER" verify --verbose --print-certs "$APK"
+        "$APKSIGNER" verify --verbose "$APK" >/dev/null 2>&1 && echo "APK_SIGNATURE_VERIFY=PASS" || { echo "APK_SIGNATURE_VERIFY=FAIL"; exit 1; }
 
   publish-cd:
     image: alpine:3.20

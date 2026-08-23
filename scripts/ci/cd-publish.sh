@@ -3,18 +3,27 @@
 set -e
 TAG=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
 REV="$CI_COMMIT_SHA"
-VER=$(grep -oE 'val dshVersionName.*"([^"]+)"' app/build.gradle.kts | sed -E 's/.*"([^"]+)"/\1/' || echo "0.8.0")
+# VER derived from the actual built APK filename (gradle DSH_VERSION_NAME may be set in another step)
+VER=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | head -1 | sed -E 's/.*dsh-mobile-([0-9]+\.[0-9]+\.[0-9]+).*/\1/' || echo "0.8.0")
 REL=/volume1/docker/dsh-mobile/releases
 mkdir -p "$REL"
 
-# pick the release APK: signed when available, else unsigned
+# pick the release APK: signed when available
 APK_SRC=""
 if [ -f app/build/outputs/apk/release/app-release.apk ]; then
   APK_SRC=app/build/outputs/apk/release/app-release.apk
   echo "[cd] signed release APK available"
-else
+elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+  # PRODUCTION signing gate: never silently publish unsigned as production
+  if [ -z "$CI_PIPELINE_DEPLOY_TARGET" ] || [ "$CI_PIPELINE_DEPLOY_TARGET" = "production" ]; then
+    echo "FAIL_SIGNING_REQUIRED production-without-signed-apk"
+    exit 1
+  fi
   APK_SRC=app/build/outputs/apk/release/app-release-unsigned.apk
-  echo "[cd] WARN: no signed release APK (keystore missing) — publishing unsigned"
+  echo "[cd] WARN: unsigned APK published for target=$CI_PIPELINE_DEPLOY_TARGET (test only)"
+else
+  echo "FAIL_SIGNING_REQUIRED no-release-apk"
+  exit 1
 fi
 if [ -n "$APK_SRC" ] && [ -f "$APK_SRC" ]; then
   cp "$APK_SRC" "$REL/dsh-mobile-${VER}+${TAG}.apk"
@@ -26,11 +35,7 @@ cd "$REL"
 sha256sum dsh-mobile-*.apk latest.apk 2>/dev/null > SHA256SUMS.txt || true
 
 # deploy status (real CD data — Running Revision = this release)
-# Test deployments (deploy_to != prod) are marked -test + draft to avoid polluting
-# the official release sequence.
-DEPLOY_TARGET="${CI_PIPELINE_DEPLOY_TARGET:-}"   # deployment event env (woodpecker 3.17)
-# Formal release targets: unset (legacy) / "production" / "prod".
-# Anything else is a test deployment -> -test-<env> draft release.
+DEPLOY_TARGET="${CI_PIPELINE_DEPLOY_TARGET:-}"
 case "$DEPLOY_TARGET" in
   ""|production|prod) TEST_MARK=""; DRAFT=false ;;
   *) TEST_MARK="-test-${DEPLOY_TARGET}"; DRAFT=true ;;
@@ -42,7 +47,7 @@ printf '{"runningRevision":"%s","shortRevision":"%s","version":"%s","buildNumber
 echo "[cd] deploy-status.json:"
 cat deploy-status.json
 
-# Gitea release asset (downloadable NAS URL)
+# Gitea release asset
 if [ -n "$GITEA_TOKEN" ] && [ -f "$REL/dsh-mobile-${VER}+${TAG}.apk" ]; then
   curl -sf -H "Authorization: token $GITEA_TOKEN" -X POST "$GITEA_URL/api/v1/repos/llzg/dsh-mobile/releases" \
     -H 'content-type: application/json' -d "{\"tag_name\":\"$RELEASE_NAME\",\"name\":\"$RELEASE_NAME\",\"draft\":$DRAFT}" >/tmp/release.json || echo "[cd] gitea release create failed"
