@@ -70,3 +70,8 @@ MANUAL BRING-UP → STABLE → IDEMPOTENCY VERIFIED → FLOOD GUARD VERIFIED →
 - 禁止用 artifact glob / 日志 grep 做幂等（用 API）。
 - 禁止把 WOODPECKER_LOG_LEVEL 设为 debug 作为长期配置（info 即可，需更细排障时临时开）。
 - 禁止无日志轮转运行 CI 容器。
+- **CRON IS INFRASTRUCTURE-ONLY**：新项目开启 cron 自动化前，`verify/release/bench`
+  不得包含 cron 事件；release 必须 deployment 门禁；preflight check #11
+  （audit-workflow-events.sh）FAIL → CI_AUTOMATION_READY=NO。
+- 禁止"一个 manual/cron event 顺手把全部 workflow 跑起来"——每个 workflow 必须
+  显式声明允许事件集。

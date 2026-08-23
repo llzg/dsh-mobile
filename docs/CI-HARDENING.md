@@ -89,3 +89,15 @@ CI_PLATFORM_HARDENED           = YES
 - 70c80dc（生产回归）：verify pipeline 唯一（#914），3+ cron 周期无重复。
 - audit-ci-queue.sh 在治理测试期间捕获 1 组测试产物重复（5bff73d：#899 success + #901 failure，来源为 ci-trigger 早期手工测试，非生产触发链）——证明审计有效。
 - agent 身份治理：每次容器重启会注册新 agent ID（agent.conf 无法持久化）；已为 woodpecker-agent 增加 /etc/woodpecker 配置卷，后续重启身份稳定。
+
+## 2026-08-23 addendum — Workflow Event Policy（CRON IS INFRASTRUCTURE-ONLY）
+
+- 新增静态审计 `scripts/ci/audit-workflow-events.sh`（PyYAML，支持 inline/block
+  when.event），策略见 `docs/workflow-event-policy.md`。
+- release.yml 门禁：3.17.0 无 workflow-level approval → `NATIVE_APPROVAL_UNAVAILABLE`，
+  `FALLBACK_GATE=deployment-event`（release 仅匹配 deployment；manual/cron/push 不产生 release）。
+- 接入：preflight check #11（FAIL→CI_AUTOMATION_READY=NO）；verify.yml 早期
+  `workflow-policy` 步骤（build 前秒级失败）。
+- dead mirror target `llzg/invoice-agent-ui` 移除（Gitea 404 每分钟；机制不变）。
+- 新增 `scripts/ops/audit-mirror-targets.sh`。
+- 回归：docs: verify workflow event policy（见 docs/REPORT 或 CI 流水线）。
