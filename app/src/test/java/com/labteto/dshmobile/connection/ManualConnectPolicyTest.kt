@@ -1,7 +1,7 @@
 package com.labteto.dshmobile.connection
 
-import com.labteto.dshmobile.ui.screens.connect.ConnectFailure
 import com.labteto.dshmobile.core.wire.dto.HostDescription
+import com.labteto.dshmobile.ui.screens.connect.ConnectFailure
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
