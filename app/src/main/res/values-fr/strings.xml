@@ -13,7 +13,7 @@
     <string name="common_loading">Chargement…</string>
     <string name="common_connected">Connecté</string>
     <string name="common_reconnecting">Reconnexion…</string>
-    <string name="chat_syncing_state">Synchronisation de l'état de la session…</string>
+    <string name="chat_syncing_state">Synchronisation de l\'état de la session…</string>
     <string name="common_offline">Hors ligne</string>
     <string name="common_error">Une erreur est survenue</string>
     <string name="common_close">Fermer</string>
@@ -430,5 +430,6 @@
     <string name="connect_relay_refused_hint">Un relais tourne ici, mais il ne répond qu\'aux adresses qu\'il connaît déjà. Ajoutez %1$s à publicHostnames dans le cordis.patch.yml du relais sur cet ordinateur, puis redémarrez-le.</string>
     <string name="pair_fail_host_refused">%1$s est bien un relais, mais il refuse les requêtes adressées ainsi — le code n\'a jamais été lu. Ajoutez cette adresse à publicHostnames dans le cordis.patch.yml du relais et redémarrez, ou joignez le relais par une adresse qu\'il connaît déjà.</string>
 </resources>
+
 
 
