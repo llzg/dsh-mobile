@@ -32,3 +32,4 @@
 - event-trigger 验证 2（hook 存在时 mirror 更新）
 - event-primary trigger 上线验证（sync 后立即 invoke ci-trigger）
 - polling fallback 验证（event path down 时 cron 补触发）
+- fallback 干净验证（event disabled, cron must trigger）
