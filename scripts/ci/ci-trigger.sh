@@ -52,7 +52,7 @@ if [ "${DF:-0}" -ge 95 ] 2>/dev/null; then echo "CI_TRIGGER=SKIPPED_DISK used=${
 
 # --- 5.5 API idempotency double-check (race-safe with concurrent event+cron) ---
 if curl -sf -H "Authorization: Bearer $TOK" "$URL/api/repos/$RID/pipelines?limit=100" --max-time 10 2>/dev/null     | sed 's/},{/}
-{/g' | grep -q "$HEAD_SHA"; then
+{/g' | grep '"event":"manual"' | grep -q "$HEAD_SHA"; then
   echo "CI_TRIGGER=NO_NEW_COMMIT sha=$HEAD_SHA reason=api-already-exists"
   exit 0
 fi
