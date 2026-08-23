@@ -29,13 +29,12 @@ sha256sum dsh-mobile-*.apk latest.apk 2>/dev/null > SHA256SUMS.txt || true
 # Test deployments (deploy_to != prod) are marked -test + draft to avoid polluting
 # the official release sequence.
 DEPLOY_TARGET="${CI_PIPELINE_DEPLOY_TARGET:-}"   # deployment event env (woodpecker 3.17)
-if [ -n "$DEPLOY_TARGET" ] && [ "$DEPLOY_TARGET" != "prod" ]; then
-  TEST_MARK="-test-${DEPLOY_TARGET}"
-  DRAFT=true
-else
-  TEST_MARK=""
-  DRAFT=false
-fi
+# Formal release targets: unset (legacy) / "production" / "prod".
+# Anything else is a test deployment -> -test-<env> draft release.
+case "$DEPLOY_TARGET" in
+  ""|production|prod) TEST_MARK=""; DRAFT=false ;;
+  *) TEST_MARK="-test-${DEPLOY_TARGET}"; DRAFT=true ;;
+esac
 RELEASE_NAME="v${VER}-build${CI_BUILD_NUMBER:-0}-${TAG}${TEST_MARK}"
 DL="$GITEA_URL/llzg/dsh-mobile/releases/download/$RELEASE_NAME/dsh-mobile-${VER}+${TAG}.apk"
 printf '{"runningRevision":"%s","shortRevision":"%s","version":"%s","buildNumber":"%s","deployedAt":"%s","health":"%s","downloadUrl":"%s","artifactStore":"/volume1/docker/dsh-mobile/releases"}\n' \
