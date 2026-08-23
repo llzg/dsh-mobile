@@ -52,6 +52,8 @@
     <string name="connect_stage_connected">সংযুক্ত</string>
     <string name="connect_cancel">বাতিল</string>
     <string name="connect_fail_invalid">কম্পিউটারের IP ঠিকানা এবং 1 থেকে 65535-এর মধ্যে একটি পোর্ট দিন।</string>
+    <string name="connect_warn_subnet">%1$s এই ফোনের বর্তমান Wi-Fi সাবনেটে নেই, তবে নেটওয়ার্ক VPN বা রাউটারের মাধ্যমে এতে পৌঁছাতে পারে — সংযোগের চেষ্টা চলছে।</string>
+    <string name="connect_warn_subnet_with_label">%1$s এই ফোনের বর্তমান Wi-Fi সাবনেটে (%2$s) নেই, তবে নেটওয়ার্ক VPN বা রাউটারের মাধ্যমে এতে পৌঁছাতে পারে — সংযোগের চেষ্টা চলছে।</string>
     <string name="connect_fail_timeout">%1$s-এ কিছুই সাড়া দেয়নি। সাধারণত কম্পিউটারের ফায়ারওয়াল %2$d পোর্টে ইনকামিং সংযোগ আটকাচ্ছে — অনুমতি দিয়ে আবার চেষ্টা করুন। কিছু রাউটার ওয়াই-ফাই ডিভাইসকে তারযুক্ত ডিভাইসে পৌঁছাতে দেয় না।</string>
     <string name="connect_fail_refused">%1$s সংযোগ প্রত্যাখ্যান করেছে। LAN মোড চালু না করলে harness কেবল কম্পিউটারেই শোনে — চালু করে harness রিস্টার্ট করুন। পোর্ট বদলালে সেটিও মিলিয়ে দেখুন।</string>
     <string name="connect_fail_fence_title">harness এই ঠিকানা প্রত্যাখ্যান করেছে</string>

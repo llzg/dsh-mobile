@@ -52,6 +52,8 @@
     <string name="connect_stage_connected">Conectado</string>
     <string name="connect_cancel">Cancelar</string>
     <string name="connect_fail_invalid">Introduce la dirección IP del ordenador y un puerto entre 1 y 65535.</string>
+    <string name="connect_warn_subnet">%1$s no está en la subred Wi-Fi actual de este teléfono, pero la red puede alcanzarlo mediante una VPN o un router; se seguirá intentando la conexión.</string>
+    <string name="connect_warn_subnet_with_label">%1$s no está en la subred Wi-Fi actual de este teléfono (%2$s), pero la red puede alcanzarlo mediante una VPN o un router; se seguirá intentando la conexión.</string>
     <string name="connect_fail_timeout">Nada respondió en %1$s. Normalmente el firewall del ordenador bloquea las conexiones entrantes en el puerto %2$d: permítelas y vuelve a intentarlo. Algunos routers también impiden que los dispositivos Wi-Fi lleguen a los de cable.</string>
     <string name="connect_fail_refused">%1$s rechazó la conexión. El harness solo escucha en el propio ordenador salvo que actives el modo LAN: actívalo y reinicia el harness. Si cambiaste el puerto, comprueba que coincide.</string>
     <string name="connect_fail_fence_title">El harness rechazó esta dirección</string>

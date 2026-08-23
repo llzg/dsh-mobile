@@ -52,6 +52,8 @@
     <string name="connect_stage_connected">कनेक्टेड</string>
     <string name="connect_cancel">रद्द करें</string>
     <string name="connect_fail_invalid">कंप्यूटर का IP पता और 1 से 65535 के बीच का पोर्ट दर्ज करें।</string>
+    <string name="connect_warn_subnet">%1$s इस फ़ोन के मौजूदा Wi-Fi सबनेट पर नहीं है, लेकिन नेटवर्क VPN या राउटर के ज़रिए उस तक पहुँच सकता है — कनेक्ट करने का प्रयास जारी है।</string>
+    <string name="connect_warn_subnet_with_label">%1$s इस फ़ोन के मौजूदा Wi-Fi सबनेट (%2$s) पर नहीं है, लेकिन नेटवर्क VPN या राउटर के ज़रिए उस तक पहुँच सकता है — कनेक्ट करने का प्रयास जारी है।</string>
     <string name="connect_fail_timeout">%1$s पर कोई जवाब नहीं मिला। आमतौर पर कंप्यूटर का फ़ायरवॉल पोर्ट %2$d पर आने वाले कनेक्शन रोकता है — उसे अनुमति देकर फिर कोशिश करें। कुछ राउटर वाई-फाई डिवाइस को तार वाले डिवाइस तक पहुँचने से भी रोकते हैं।</string>
     <string name="connect_fail_refused">%1$s ने कनेक्शन अस्वीकार कर दिया। LAN मोड चालू किए बिना harness केवल कंप्यूटर पर ही सुनता है — उसे चालू करके harness पुनः आरंभ करें। पोर्ट बदला हो तो उसे भी मिलाएँ।</string>
     <string name="connect_fail_fence_title">harness ने यह पता अस्वीकार कर दिया</string>
