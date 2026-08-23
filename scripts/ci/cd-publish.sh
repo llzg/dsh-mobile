@@ -4,7 +4,7 @@ set -e
 TAG=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
 REV="$CI_COMMIT_SHA"
 # VER derived from the actual built APK filename (gradle DSH_VERSION_NAME may be set in another step)
-VER=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | head -1 | sed -E 's/.*dsh-mobile-([0-9]+\.[0-9]+\.[0-9]+).*/\1/' || echo "0.8.0")
+VER="${DSH_VERSION_NAME:-0.8.0}"   # DSH_VERSION_NAME injected in release.yml publish-cd
 REL=/volume1/docker/dsh-mobile/releases
 mkdir -p "$REL"
 

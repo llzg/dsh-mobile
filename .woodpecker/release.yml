@@ -117,6 +117,7 @@ steps:
       GITEA_TOKEN:
         from_secret: GITEA_TOKEN
       GITEA_URL: http://192.168.5.35:3000
+      DSH_VERSION_NAME: "0.8.1"
     volumes:
       - /volume1:/volume1
     commands:
