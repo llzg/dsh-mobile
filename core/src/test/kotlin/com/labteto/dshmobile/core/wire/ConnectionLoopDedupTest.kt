@@ -47,7 +47,7 @@ class ConnectionLoopDedupTest {
         override fun onStateChange(state: ConnectionState) = Unit
     }
 
-    private fun await(predicate: () -> Boolean): Boolean =
+    private suspend fun await(predicate: () -> Boolean): Boolean =
         withTimeoutOrNull(5_000) {
             while (!predicate()) kotlinx.coroutines.delay(5)
             true
