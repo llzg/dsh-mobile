@@ -35,6 +35,15 @@ steps:
       - sh scripts/ci/ci-trigger-guard.sh --pipeline-name auto-verify --lockfile /volume1/docker/dsh-mobile/ci-cache/guard/trigger.lock --in-pipeline
       - echo "guard-done"
 
+  # Event policy gate (platform): fail within seconds if .woodpecker event policy
+  # is violated (e.g. verify+cron, release without deployment gate) — BEFORE any build.
+  workflow-policy:
+    image: alpine:3.20
+    commands:
+      - if [ -f .ci-skip ]; then echo "skip policy (already verified)"; exit 0; fi
+      - apk add --no-cache python3 >/dev/null 2>&1 || true
+      - sh scripts/ci/audit-workflow-events.sh --dir .woodpecker --repo "$CI_REPO"
+
   setup-java:
     image: eclipse-temurin:17-jdk
     environment:
