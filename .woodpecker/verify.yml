@@ -120,10 +120,11 @@ steps:
     commands:
       - if [ -f .ci-skip ]; then echo "skip assemble (already verified)"; exit 0; fi
       - export DSH_BUILD_REVISION="$CI_COMMIT_SHA"
+      # Daily verify: assembleDebug only. Release variant is built + signature-verified
+      # in the deployment release workflow (assembleRelease costs ~83s on every commit
+      # because BUILD_REVISION changes invalidate the gradle cache; release gate keeps quality).
       - ./gradlew --no-daemon :app:assembleDebug --stacktrace
-      - export DSH_BUILD_REVISION="$CI_COMMIT_SHA"
-      - ./gradlew --no-daemon :app:assembleRelease --stacktrace
-      - ls -la app/build/outputs/apk/debug app/build/outputs/apk/release
+      - ls -la app/build/outputs/apk/debug/
 
   publish-artifact:
     image: alpine:3.20
