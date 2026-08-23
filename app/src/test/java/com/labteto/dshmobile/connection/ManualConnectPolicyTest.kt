@@ -1,6 +1,7 @@
 package com.labteto.dshmobile.connection
 
 import com.labteto.dshmobile.ui.screens.connect.ConnectFailure
+import com.labteto.dshmobile.core.wire.dto.HostDescription
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -27,7 +28,7 @@ class ManualConnectPolicyTest {
             ManualConnectPolicy.subnetRelation("192.168.43.20", local),
         )
         assertFalse(ManualConnectPolicy.offSubnetWarning("192.168.43.20", local))
-        assertTrue(proceeds(ProbeOutcome.Reachable))
+        assertTrue(proceeds(reachableOutcome()))
     }
 
     // Case 2 — 节点小宝 scenario: phone 192.168.43.x, harness 192.168.5.16, reachable → PASS
@@ -39,7 +40,7 @@ class ManualConnectPolicyTest {
             ManualConnectPolicy.subnetRelation("192.168.5.16", local),
         )
         assertTrue(ManualConnectPolicy.offSubnetWarning("192.168.5.16", local))
-        assertTrue(proceeds(ProbeOutcome.Reachable))
+        assertTrue(proceeds(reachableOutcome()))
     }
 
     // Case 3 — phone 10.0.0.10, harness 192.168.5.16, reachable → PASS
@@ -51,7 +52,7 @@ class ManualConnectPolicyTest {
             ManualConnectPolicy.subnetRelation("192.168.5.16", local),
         )
         assertTrue(ManualConnectPolicy.offSubnetWarning("192.168.5.16", local))
-        assertTrue(proceeds(ProbeOutcome.Reachable))
+        assertTrue(proceeds(reachableOutcome()))
     }
 
     // Case 4 — same topology as Case 3 but unreachable: the real cause (Timeout) is reported,
@@ -80,6 +81,10 @@ class ManualConnectPolicyTest {
 
     /** The manual path connects on a reachable probe; it never fails for subnet reasons. */
     private fun proceeds(outcome: ProbeOutcome): Boolean = outcome is ProbeOutcome.Reachable
+
+    /** A reachable probe, as the manual path would receive it from host.describe. */
+    private fun reachableOutcome(): ProbeOutcome =
+        ProbeOutcome.Reachable(HostDescription(version = '0.8.2', cwd = '/', attachedSessions = 0, canOpenPath = false))
 
     /** What the manual path reports when the probe fails — its real cause, via the shared mapping. */
     private fun failureFor(outcome: ProbeOutcome): ConnectFailure = ConnectFailure.from(outcome)
