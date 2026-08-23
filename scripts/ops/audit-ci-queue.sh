@@ -17,7 +17,7 @@ for repo in $REPOS; do
   P=$(echo "$JSON" | sed 's/},{/}\n{/g' | grep -c '"status":"pending"' 2>/dev/null || echo 0)
   R=$(echo "$JSON" | sed 's/},{/}\n{/g' | grep -c '"status":"running"' 2>/dev/null || echo 0)
   P=$(echo "$P" | grep -oE "[0-9]+" | head -1); [ -z "$P" ] && P=0; R=$(echo "$R" | grep -oE "[0-9]+" | head -1); [ -z "$R" ] && R=0; TOTAL_PENDING=$((TOTAL_PENDING + P)); TOTAL_RUNNING=$((TOTAL_RUNNING + R))
-  D=$(echo "$JSON" | sed 's/},{/}\n{/g' | grep -v '"status":"canceled"' | grep -v '"status":"error"' \
+  D=$(echo "$JSON" | sed 's/},{/}\n{/g' | grep -v '"status":"canceled"' | grep -v '"status":"error"' | grep -v '"cron":"mirror-sync"' \
     | grep -oE '"commit":"[0-9a-f]{7,}"' | sort | uniq -d | wc -l)
   DUPS=$((DUPS + D))
   echo "$repo | pending=$P running=$R dup-commits=$D"
