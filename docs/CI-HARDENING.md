@@ -83,3 +83,9 @@ CI_PLATFORM_HARDENED           = YES
 - invoice-agent 仍使用原生 */1 auto-verify cron + 其自有幂等（registry+API 双检查）；建议后续按 SOP 评估是否迁移到 ci-trigger 模式（未擅自改动其生产配置）。
 - mirror-sync cron 每分钟产生 1 条 mirror-sync pipeline 记录（~20-30s no-op）——机制必要开销；如在意记录噪音，可将 mirror-sync 也移到宿主 timer（本次保持最小改动）。
 - WOODPECKER_LOG_LEVEL 需要更细排障时可临时切回 debug（有轮转兜底）。
+
+## 补充（治理后审计运行记录）
+
+- 70c80dc（生产回归）：verify pipeline 唯一（#914），3+ cron 周期无重复。
+- audit-ci-queue.sh 在治理测试期间捕获 1 组测试产物重复（5bff73d：#899 success + #901 failure，来源为 ci-trigger 早期手工测试，非生产触发链）——证明审计有效。
+- agent 身份治理：每次容器重启会注册新 agent ID（agent.conf 无法持久化）；已为 woodpecker-agent 增加 /etc/woodpecker 配置卷，后续重启身份稳定。
