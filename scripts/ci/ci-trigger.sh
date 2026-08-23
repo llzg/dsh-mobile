@@ -1,11 +1,11 @@
 #!/bin/sh
 # ci-trigger.sh — discover NEW commits on the Gitea mirror and create exactly ONE pipeline
-# This replaces blind every-minute cron: the trigger only fires when the mirror HEAD
-# has moved to a commit that has not yet been triggered.
-# Env: WOODPECKER_URL, WOODPECKER_TOKEN, GITEA_URL, GITEA_TOKEN (or GITEA_MIRROR_URL for git ls-remote)
+# Env: WOODPECKER_URL, WOODPECKER_TOKEN, GITEA_URL, GITEA_TOKEN
 #      STATE_DIR (persistent state dir), FLOOD_LIMIT (default 10)
 # Usage: ci-trigger.sh <owner/repo>
 # Output: CI_TRIGGER=NEW_COMMIT_PIPELINE_CREATED|NO_NEW_COMMIT|SKIPPED_FLOOD|SKIPPED_LOCKED|ERROR
+# Note: JSON array splitting uses tr (busybox-compatible); sed s/},{/\\n{/g broke
+#       on hosts where the literal backslash-n was mangled into a real newline.
 set -u
 REPO="${1:-}"
 if [ -z "$REPO" ]; then echo "usage: ci-trigger.sh <owner/repo>"; exit 2; fi
@@ -35,12 +35,12 @@ if [ -z "$HEAD_SHA" ]; then echo "CI_TRIGGER=ERROR reason=mirror-head-unreadable
 LAST=$(cat "$STATE_FILE" 2>/dev/null || echo "")
 if [ "$LAST" = "$HEAD_SHA" ]; then echo "CI_TRIGGER=NO_NEW_COMMIT sha=$HEAD_SHA"; exit 0; fi
 
-# --- 4. flood guard (pending count for this repo) ---
+# --- 4. flood guard ---
 RID=$(curl -sf -H "Authorization: Bearer $TOK" "$URL/api/repos?limit=100" --max-time 10 2>/dev/null \
-  | sed 's/},{/}\n{/g' | grep "\"full_name\":\"$REPO\"" | grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2)
+  | tr '}' '\n' | grep "\"full_name\":\"$REPO\"" | grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2)
 if [ -z "$RID" ]; then echo "CI_TRIGGER=ERROR reason=repo-not-found"; exit 1; fi
 P=$(curl -sf -H "Authorization: Bearer $TOK" "$URL/api/repos/$RID/pipelines?limit=100" --max-time 10 2>/dev/null \
-  | sed 's/},{/}\n{/g' | grep -c '"status":"pending"' 2>/dev/null)
+  | tr '}' '\n' | grep -c '"status":"pending"' 2>/dev/null)
 P=$(echo "$P" | grep -oE "[0-9]+" | head -1); [ -z "$P" ] && P=0
 if [ "$P" -gt "$FLOOD_LIMIT" ] 2>/dev/null; then
   echo "CI_TRIGGER=SKIPPED_FLOOD pending=$P limit=$FLOOD_LIMIT"; exit 0
@@ -50,9 +50,9 @@ fi
 DF=$(df -P /volume1 2>/dev/null | awk 'NR==2 {gsub("%","",$5); print $5}' 2>/dev/null || echo 0)
 if [ "${DF:-0}" -ge 95 ] 2>/dev/null; then echo "CI_TRIGGER=SKIPPED_DISK used=${DF}%"; exit 0; fi
 
-# --- 5.5 API idempotency double-check (race-safe with concurrent event+cron) ---
-if curl -sf -H "Authorization: Bearer $TOK" "$URL/api/repos/$RID/pipelines?limit=100" --max-time 10 2>/dev/null     | sed 's/},{/}
-{/g' | grep '"event":"manual"' | grep -q "$HEAD_SHA"; then
+# --- 5.5 API idempotency double-check (manual pipelines only) ---
+if curl -sf -H "Authorization: Bearer $TOK" "$URL/api/repos/$RID/pipelines?limit=100" --max-time 10 2>/dev/null \
+    | tr '}' '\n' | grep '"event":"manual"' | grep -q "$HEAD_SHA"; then
   echo "CI_TRIGGER=NO_NEW_COMMIT sha=$HEAD_SHA reason=api-already-exists"
   exit 0
 fi
@@ -62,6 +62,6 @@ CREATED=$(curl -sf -H "Authorization: Bearer $TOK" -H "content-type: application
   -X POST "$URL/api/repos/$RID/pipelines" -d '{"branch":"main"}' --max-time 15 2>/dev/null \
   | grep -oE '"number":[0-9]+' | head -1 | cut -d: -f2)
 if [ -z "$CREATED" ]; then echo "CI_TRIGGER=ERROR reason=pipeline-create-failed"; exit 1; fi
-echo "$HEAD_SHA" > "$STATE_FILE"
+echo "$HEAD_SHA" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
 echo "CI_TRIGGER=NEW_COMMIT_PIPELINE_CREATED sha=$HEAD_SHA pipeline=$CREATED"
 exit 0
