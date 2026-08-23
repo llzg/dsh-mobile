@@ -8,6 +8,7 @@
 # + Gitea release asset (if GITEA_TOKEN secret present). Healthcheck via download URL.
 when:
   event: [deployment]
+  evaluate: 'CI_PIPELINE_DEPLOY_TARGET != "benchmark"'
   branch: main
 
 clone:

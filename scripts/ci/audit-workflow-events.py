@@ -39,7 +39,7 @@ POLICY = {
     "mirror-sync": {"require": ["cron"], "forbid": ["push", "pull_request"], "warn": ["manual"]},
     "verify":     {"require": [], "forbid": ["cron"]},
     "release":    {"require": ["deployment"], "forbid": ["cron", "push", "pull_request"], "warn": ["manual"]},
-    "bench":      {"require": ["manual"], "forbid": ["cron", "push", "pull_request"]},
+    "bench":      {"require": ["deployment"], "forbid": ["cron", "push", "pull_request", "manual"], "benchmark_gate": True},
 }
 # semantic aliases: root .woodpecker.yml is stored as workflow "woodpecker" and is
 # the repo's default pipeline (verify-equivalent)

@@ -1,7 +1,9 @@
-# bench.yml — manual: full build benchmark on the CURRENT revision (no idempotency skip)
-# COLD=1 clears the ci-cache volumes first → measures cold build; run again without it → warm.
+# bench.yml — explicit benchmark ONLY (event governance 2026-08-23)
+# Triggered by: deploy_to=benchmark deployment event. NEVER runs on normal
+# manual/push/cron. COLD=1 clears caches -> cold build measurement.
 when:
-  event: [manual]
+  event: [deployment]
+  evaluate: 'CI_PIPELINE_DEPLOY_TARGET == "benchmark"'
   branch: main
 
 clone:
@@ -17,9 +19,10 @@ steps:
     volumes:
       - /volume1:/volume1
     commands:
-      - echo "BENCH_COLD=$BENCH_COLD revision=$CI_COMMIT_SHA"
+      - echo "BENCH_COLD=$BENCH_COLD revision=$CI_COMMIT_SHA target=$CI_PIPELINE_DEPLOY_TARGET"
       - if [ "$BENCH_COLD" = "1" ]; then rm -rf /volume1/docker/dsh-mobile/ci-cache; echo "caches cleared (cold)"; fi
       - mkdir -p /volume1/docker/dsh-mobile/ci-cache
+      - mkdir -p /volume1/docker/dsh-mobile/benchmarks
 
   setup-android-sdk:
     image: eclipse-temurin:17-jdk
@@ -42,9 +45,9 @@ steps:
       - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
       - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
     commands:
-      - echo "BENCH_START_TESTS=$(date +%s%3N)"
+      - echo "BENCH_START_TESTS=$(date +%s%3N)" | tee -a bench-times.txt
       - ./gradlew --no-daemon :core:test :mock-harness:test :app:testDebugUnitTest --stacktrace
-      - echo "BENCH_END_TESTS=$(date +%s%3N)"
+      - echo "BENCH_END_TESTS=$(date +%s%3N)" | tee -a bench-times.txt
 
   bench-assemble:
     image: eclipse-temurin:17-jdk
@@ -58,15 +61,20 @@ steps:
       - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
     commands:
       - export DSH_BUILD_REVISION="$CI_COMMIT_SHA"
-      - echo "BENCH_START_ASSEMBLE=$(date +%s%3N)"
+      - echo "BENCH_START_ASSEMBLE=$(date +%s%3N)" | tee -a bench-times.txt
       - ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease --stacktrace
-      - echo "BENCH_END_ASSEMBLE=$(date +%s%3N)"
+      - echo "BENCH_END_ASSEMBLE=$(date +%s%3N)" | tee -a bench-times.txt
       - ls -la app/build/outputs/apk/debug app/build/outputs/apk/release
 
-  bench-publish:
+  bench-report:
     image: alpine:3.20
     volumes:
       - /volume1:/volume1
     commands:
-      - sh scripts/ci/publish-artifact.sh
-
+      - |
+        TAG=$(echo "$CI_COMMIT_SHA" | cut -c1-7)
+        mkdir -p /volume1/docker/dsh-mobile/benchmarks/$TAG
+        awk '/BENCH_START|BENCH_END/{print}' bench-times.txt > /volume1/docker/dsh-mobile/benchmarks/$TAG/bench-times.txt 2>/dev/null || true
+        echo "{\"revision\":\"$CI_COMMIT_SHA\",\"short\":\"$TAG\",\"cold\":\"${BENCH_COLD:-0}\",\"target\":\"$CI_PIPELINE_DEPLOY_TARGET\",\"collectedAt\":\"$(date -u +%FT%TZ)\"}" > /volume1/docker/dsh-mobile/benchmarks/$TAG/report.json
+        echo "BENCH_REPORT=/volume1/docker/dsh-mobile/benchmarks/$TAG"
+        ls -la /volume1/docker/dsh-mobile/benchmarks/$TAG/
