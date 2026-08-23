@@ -14,6 +14,7 @@
     <string name="common_loading">Loading…</string>
     <string name="common_connected">Connected</string>
     <string name="common_reconnecting">Reconnecting…</string>
+    <string name="chat_syncing_state">Syncing session state…</string>
     <string name="common_offline">Offline</string>
     <string name="common_error">Something went wrong</string>
     <string name="common_close">Close</string>

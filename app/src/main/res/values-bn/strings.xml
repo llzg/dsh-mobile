@@ -13,6 +13,7 @@
     <string name="common_loading">লোড হচ্ছে…</string>
     <string name="common_connected">সংযুক্ত</string>
     <string name="common_reconnecting">পুনরায় সংযুক্ত হচ্ছে…</string>
+    <string name="chat_syncing_state">সেশনের অবস্থা সিংক হচ্ছে…</string>
     <string name="common_offline">অফলাইন</string>
     <string name="common_error">কিছু একটা ভুল হয়েছে</string>
     <string name="common_close">বন্ধ করুন</string>

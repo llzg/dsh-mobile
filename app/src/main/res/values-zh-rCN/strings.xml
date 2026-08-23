@@ -13,6 +13,7 @@
     <string name="common_loading">加载中…</string>
     <string name="common_connected">已连接</string>
     <string name="common_reconnecting">重新连接中…</string>
+    <string name="chat_syncing_state">正在同步会话状态…</string>
     <string name="common_offline">离线</string>
     <string name="common_error">出了点问题</string>
     <string name="common_close">关闭</string>

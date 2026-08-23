@@ -81,7 +81,7 @@ interface LoopSinks {
  */
 class LoopConfig(
     /** Base backoff delay in ms (first reconnect sleeps in [baseDelayMs/2, baseDelayMs]). */
-    val baseDelayMs: Long = 500L,
+    val baseDelayMs: Long = 1_000L,
     /** Exponential growth factor per consecutive failed generation. */
     val backoffFactor: Double = 2.0,
     /** Upper bound on the per-attempt backoff cap in ms. */
@@ -107,7 +107,7 @@ private suspend fun defaultSleep(ms: Long) {
  * 2. Call `host.describe`; when it succeeds the loop is [ConnectionState.CONNECTED].
  * 3. Stream frames to [LoopSinks] until a `stream/error` frame, a socket close, or a failure
  *    terminates the generation — then reconnect with exponential backoff
- *    (base 500ms, factor 2, max 10s, jitter cap/2..cap).
+ *    (base 1s, factor 2, max 10s, jitter cap/2..cap — 1s/2s/4s/8s/10s).
  *
  * [start] and [stop] are idempotent. Sink exceptions are contained and never kill the loop.
  */

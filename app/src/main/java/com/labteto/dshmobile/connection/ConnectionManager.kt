@@ -2,6 +2,7 @@ package com.labteto.dshmobile.connection
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.labteto.dshmobile.core.wire.ConnectionLoop
 import com.labteto.dshmobile.core.wire.ConnectionState
@@ -70,6 +71,10 @@ class ConnectionManager @Inject constructor(
     private var api: DshApiClient? = null
     private var activeHost: HostConfig? = null
 
+    /** Consecutive failed generations since the last successful connect, for diagnostics. */
+    @Volatile
+    private var reconnectAttempts: Int = 0
+
     /** Downlink frame consumers (screens subscribe here). */
     val muxFrames = kotlinx.coroutines.flow.MutableSharedFlow<ServerRequest>(extraBufferCapacity = 256)
     val hostFrames = kotlinx.coroutines.flow.MutableSharedFlow<ServerRequest>(extraBufferCapacity = 64)
@@ -95,6 +100,9 @@ class ConnectionManager @Inject constructor(
                 attempts = 0,
                 hasConnected = true,
             )
+            log("WS_CONNECTED host=" + (activeHost?.authority ?: "none") +
+                " reconnectAttempts=" + reconnectAttempts)
+            reconnectAttempts = 0
             maybeStartService()
         }
 
@@ -107,6 +115,12 @@ class ConnectionManager @Inject constructor(
                 // healthy session dropping, and hid it from the connect screen entirely.
                 current.hasConnected -> ConnectionPhase.RECONNECTING
                 else -> ConnectionPhase.CONNECTING
+            }
+            if (current.hasConnected && phase == ConnectionPhase.RECONNECTING) {
+                // HTTP may still be fine (uploads, RPC) — this is the event-stream socket dropping,
+                // not the harness becoming unreachable.
+                log("WS_DISCONNECTED host=" + (activeHost?.authority ?: "none") +
+                    " reconnectAttempts=" + reconnectAttempts)
             }
             // Note: does not clear `failure`. The loop emits this on every retry, so clearing here
             // would erase the explanation a fraction of a second after showing it.
@@ -123,6 +137,9 @@ class ConnectionManager @Inject constructor(
 
         override fun onGenerationFailed(attempt: Int, failure: GenerationFailure) {
             val host = activeHost
+            reconnectAttempts = attempt
+            log("WS_RECONNECT_ATTEMPT host=" + (activeHost?.authority ?: "none") +
+                " attempt=" + attempt + " failure=" + failure::class.simpleName)
             _state.value = _state.value.copy(
                 failure = ConnectFailure.from(failure, relay = host?.isRelay == true),
                 attempts = attempt,
@@ -144,6 +161,7 @@ class ConnectionManager @Inject constructor(
      */
     suspend fun connect(config: HostConfig) {
         disconnect()
+        log("WS_CONNECT host=" + config.authority + " relay=" + config.isRelay)
         activeHost = config
         _state.value = ConnectionUiState(
             phase = ConnectionPhase.CONNECTING,
@@ -219,6 +237,10 @@ class ConnectionManager @Inject constructor(
         )
     }
 
+    private fun log(message: String) {
+        Log.w(TAG, message)
+    }
+
     private fun maybeStartService() {
         val settings = runBlockingRead { hostsStore.settingsOnce() }
         if (settings.keepConnectedInBackground) startService()
@@ -235,4 +257,8 @@ class ConnectionManager @Inject constructor(
 
     private fun <T> runBlockingRead(block: suspend () -> T): T =
         kotlinx.coroutines.runBlocking { block() }
+
+    private companion object {
+        const val TAG = "ConnectionManager"
+    }
 }

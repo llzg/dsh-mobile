@@ -3,6 +3,7 @@ package com.labteto.dshmobile
 import android.app.Application
 import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
+import com.labteto.dshmobile.connection.ConnectionLifecycle
 import com.labteto.dshmobile.connection.KeepAliveWorker
 import com.labteto.dshmobile.notify.NotificationObserver
 import dagger.hilt.android.HiltAndroidApp
@@ -15,11 +16,16 @@ class DshApplication : Application() {
     // their frame collectors; start() then begins notification classification.
     @Inject lateinit var notificationObserver: NotificationObserver
 
+    // Foreground/network nudges for the connection: returning to the foreground or the network
+    // coming back starts a reconnect + HTTP state reconciliation immediately.
+    @Inject lateinit var connectionLifecycle: ConnectionLifecycle
+
     override fun onCreate() {
         super.onCreate()
         AppCompatDelegate.setDefaultNightMode(nightModeFor(storedThemePreference(this)))
         KeepAliveWorker.schedule(this)
         notificationObserver.start()
+        connectionLifecycle.register()
     }
 
     companion object {

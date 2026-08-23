@@ -8,6 +8,7 @@ import com.labteto.dshmobile.connection.HostsStore
 import com.labteto.dshmobile.core.session.ConversationSnapshot
 import com.labteto.dshmobile.core.session.EventFold
 import com.labteto.dshmobile.core.session.QueueItem
+import com.labteto.dshmobile.core.session.RunningReconcile
 import com.labteto.dshmobile.core.session.SessionEventEnvelope
 import com.labteto.dshmobile.core.wire.DshApiClient
 import com.labteto.dshmobile.core.wire.RpcReceipt
@@ -96,7 +97,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonElement
@@ -233,7 +233,17 @@ class SessionStore @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val lock = Any()
-    private val baselineMutex = Mutex()
+
+    /**
+     * Coalesced baseline requests, drained by a single worker.
+     *
+     * A reconnect must never be skipped because a previous baseline was still in flight: the whole
+     * point of a reconnect baseline is to replace stream-learned state with HTTP-authoritative
+     * state, and a tryLock-skip would leave a stale running=true — and a composer with no send
+     * button — until some later event happened to correct it.
+     */
+    private val baselineRequests = Channel<Unit>(Channel.CONFLATED)
+
 
     /** Coalesces transcript rebuilds during a stream; see [observeRebuildTicks]. */
     private val rebuildTicks = Channel<Unit>(Channel.CONFLATED)
@@ -281,6 +291,11 @@ class SessionStore @Inject constructor(
 
     private val _connectionError = MutableStateFlow<String?>(null)
     val connectionError: StateFlow<String?> = _connectionError.asStateFlow()
+
+    /** The live connection phase, for the chat screen's banner and composer gating. */
+    val connectionPhase: StateFlow<ConnectionPhase> = connectionManager.state
+        .map { it.phase }
+        .stateIn(scope, SharingStarted.Eagerly, connectionManager.state.value.phase)
 
     private val _toolViews = MutableStateFlow<Map<Long, ToolEventView>>(emptyMap())
     val toolViews: StateFlow<Map<Long, ToolEventView>> = _toolViews.asStateFlow()
@@ -444,7 +459,25 @@ class SessionStore @Inject constructor(
                     prev.phase == ConnectionPhase.RECONNECTING &&
                     state.phase == ConnectionPhase.CONNECTED
                 prev = state
-                if (initialConnect || reconnect) triggerBaseline()
+                if (reconnect) {
+                    log("WS_RECONNECTED session=" + shortId(currentSessionId.value))
+                    triggerBaseline()
+                } else if (initialConnect) {
+                    triggerBaseline()
+                }
+            }
+        }
+    }
+
+    init {
+        // Single worker so reconnect baselines are never skipped and never overlap.
+        scope.launch {
+            for (unit in baselineRequests) {
+                try {
+                    baseline()
+                } catch (e: Exception) {
+                    log("STATE_RECONCILE_RESULT failed", e)
+                }
             }
         }
     }
@@ -459,19 +492,24 @@ class SessionStore @Inject constructor(
     }
 
     private fun triggerBaseline() {
-        scope.launch {
-            if (!baselineMutex.tryLock()) return@launch
-            try {
-                baseline()
-            } catch (e: Exception) {
-                log("baseline failed", e)
-            } finally {
-                baselineMutex.unlock()
-            }
-        }
+        baselineRequests.trySend(Unit)
+    }
+
+    /**
+     * Reconcile client state against HTTP-authoritative harness state.
+     *
+     * Runs on every (re)connect: session list, presets, then a full re-open of the current session
+     * whose history rebuild re-derives running and clears any stream-induced gap. This is the
+     * only place a stale running flag — a turn/end lost with a dead WebSocket — is corrected.
+     */
+    suspend fun requestReconcile() {
+        triggerBaseline()
     }
 
     private suspend fun baseline() {
+        val runningNow = synchronized(lock) { runningBySession[currentSessionId.value] }
+        log("STATE_RECONCILE_START session=" + shortId(currentSessionId.value) +
+            " running=" + runningNow)
         // Whether content search works is a fact about the harness we just reached, so a fresh
         // connection re-earns the answer rather than inheriting the previous host's.
         _contentSearchAvailable.value = true
@@ -483,6 +521,11 @@ class SessionStore @Inject constructor(
         // first connect of a process — no double-open, and reconnect keeps reopening what was open.
         val sid = currentSessionId.value ?: resolveInitialSession() ?: return
         openSession(sid)
+        synchronized(lock) {
+            log("STATE_RECONCILE_RESULT session=" + shortId(sid) +
+                " running=" + (runningBySession[sid] ?: "none") +
+                " lastSeq=" + currentEvents.lastOrNull()?.seq)
+        }
     }
 
     /**
@@ -718,10 +761,12 @@ class SessionStore @Inject constructor(
 
     private fun setRunning(sessionId: String, running: Boolean) {
         synchronized(lock) {
+            val changed = runningBySession[sessionId] != running
             runningBySession[sessionId] = running
             sessionRows[sessionId]?.let { if (it.running != running) sessionRows[sessionId] = it.copy(running = running) }
             if (sessionId == currentId) rebuildCurrentLocked()
             emitSessionsLocked()
+            if (changed) log("RUNNING_STATE_CHANGED session=" + shortId(sessionId) + " running=" + running)
         }
     }
 
@@ -827,7 +872,10 @@ class SessionStore @Inject constructor(
         val events = currentEvents.toList()
         val snapshot = EventFold(sid).fold(events)
         val blank = if (events.isEmpty()) currentBlank else snapshot.blank
-        val running = runningBySession[sid] ?: snapshot.running
+        // Live events win while the stream is alive; after a reconnect the openSession reconcile
+        // overwrote runningBySession with the authoritative history fold, so this falls through to
+        // the corrected value. The override never outlives a reconnect.
+        val running = RunningReconcile.live(runningBySession[sid], snapshot.running)
         val merged = snapshot.copy(
             blank = blank,
             running = running,
@@ -973,6 +1021,10 @@ class SessionStore @Inject constructor(
                     envelopes.add(sessionEventToEnvelope(entry.event))
                     entry.view?.let { views[entry.event.seq.toLong()] = it }
                 }
+                // Authoritative running: the history page is the server's own transcript, so a
+                // turn/end that arrived while the WebSocket was down is finally visible. A running
+                // flag learned from a stream that may have missed that event must not outlive it.
+                val authoritativeRunning = RunningReconcile.runningFromEvents(envelopes)
                 synchronized(lock) {
                     if (currentId != sessionId) return@synchronized
                     currentEvents.clear()
@@ -986,6 +1038,12 @@ class SessionStore @Inject constructor(
                             currentProjections[key] = ProjectionValue(block.asOfSeq, value)
                         }
                     }
+                    val previous = runningBySession[sessionId]
+                    if (previous != null && previous != authoritativeRunning) {
+                        log("RUNNING_STATE_CHANGED session=" + shortId(sessionId) +
+                            " running=" + authoritativeRunning + " (reconciled from history)")
+                    }
+                    runningBySession[sessionId] = authoritativeRunning
                     rebuildCurrentLocked()
                 }
             }
@@ -1699,6 +1757,9 @@ class SessionStore @Inject constructor(
     private fun log(message: String, throwable: Throwable? = null) {
         if (throwable != null) Log.w(TAG, message, throwable) else Log.w(TAG, message)
     }
+
+    /** Session ids are wire ids; a short prefix keeps logs readable without leaking the full id. */
+    private fun shortId(sessionId: String?): String = sessionId?.take(8) ?: "none"
 
     private companion object {
         const val TAG = "SessionStore"

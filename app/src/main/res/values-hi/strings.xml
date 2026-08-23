@@ -13,6 +13,7 @@
     <string name="common_loading">लोड हो रहा है…</string>
     <string name="common_connected">कनेक्टेड</string>
     <string name="common_reconnecting">फिर से कनेक्ट हो रहा है…</string>
+    <string name="chat_syncing_state">सत्र की स्थिति सिंक हो रही है…</string>
     <string name="common_offline">ऑफ़लाइन</string>
     <string name="common_error">कुछ गलत हो गया</string>
     <string name="common_close">बंद करें</string>

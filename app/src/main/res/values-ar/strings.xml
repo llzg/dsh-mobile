@@ -13,6 +13,7 @@
     <string name="common_loading">جارٍ التحميل…</string>
     <string name="common_connected">متصل</string>
     <string name="common_reconnecting">جارٍ إعادة الاتصال…</string>
+    <string name="chat_syncing_state">جارٍ مزامنة حالة الجلسة…</string>
     <string name="common_offline">غير متصل</string>
     <string name="common_error">حدث خطأ ما</string>
     <string name="common_close">إغلاق</string>

@@ -13,6 +13,7 @@
     <string name="common_loading">Carregando…</string>
     <string name="common_connected">Conectado</string>
     <string name="common_reconnecting">Reconectando…</string>
+    <string name="chat_syncing_state">Sincronizando o estado da sessão…</string>
     <string name="common_offline">Offline</string>
     <string name="common_error">Algo deu errado</string>
     <string name="common_close">Fechar</string>

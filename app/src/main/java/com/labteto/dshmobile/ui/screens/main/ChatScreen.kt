@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -40,6 +41,7 @@ import com.labteto.dshmobile.core.wire.dto.ImageLimitsView
 import com.labteto.dshmobile.data.CommandOutcome
 import com.labteto.dshmobile.data.PromptOutcome
 import com.labteto.dshmobile.data.QuestionOutcome
+import com.labteto.dshmobile.connection.ConnectionPhase
 import com.labteto.dshmobile.data.SessionStore
 import com.labteto.dshmobile.ui.components.ApprovalPanel
 import com.labteto.dshmobile.ui.components.ConnectionBanner
@@ -51,6 +53,7 @@ import com.labteto.dshmobile.ui.components.rememberDsToast
 import com.labteto.dshmobile.ui.rememberSessionStore
 import com.labteto.dshmobile.ui.theme.DsAnimations
 import com.labteto.dshmobile.ui.theme.DsTheme
+import com.labteto.dshmobile.ui.theme.DsType
 import androidx.compose.ui.res.stringResource
 import com.labteto.dshmobile.R
 import kotlinx.coroutines.launch
@@ -86,6 +89,7 @@ fun ChatScreen(
     val subagentConversation by store.subagentConversation.collectAsStateWithLifecycle()
     val subagentMode by store.subagentMode.collectAsStateWithLifecycle()
     val connectionError by store.connectionError.collectAsStateWithLifecycle()
+    val connectionPhase by store.connectionPhase.collectAsStateWithLifecycle()
     val loadingOlder by store.loadingOlder.collectAsStateWithLifecycle()
     val loadOlderFailed by store.loadOlderFailed.collectAsStateWithLifecycle()
     val pendingApproval by store.pendingApproval.collectAsStateWithLifecycle()
@@ -100,6 +104,10 @@ fun ChatScreen(
     val imageLimits by store.imageLimits.collectAsStateWithLifecycle()
 
     val currentSession = sessions.firstOrNull { it.sessionId == currentSessionId }
+    // While the event-stream socket is down or a gap is being repaired, we cannot confirm turn
+    // state: HTTP may be fine (uploads, RPC) but the stream that carries turn/end is not.
+    // The composer is disabled and says so, and the reconnect reconcile re-derives running.
+    val syncing = connectionPhase == ConnectionPhase.RECONNECTING || conversation?.gap == true
     val title = currentSession?.title
         ?: currentSession?.cwd?.let { basename(it) }
         ?: currentSessionId.orEmpty()
@@ -273,7 +281,7 @@ fun ChatScreen(
             )
 
             connectionError?.let { ConnectionBanner(it) }
-            if (conversation?.gap == true) {
+            if (syncing) {
                 ConnectionBanner(stringResource(R.string.common_reconnecting))
             }
 
@@ -403,6 +411,14 @@ fun ChatScreen(
                 }
             }
 
+            if (syncing) {
+                Text(
+                    stringResource(R.string.chat_syncing_state),
+                    style = DsType.caption11,
+                    color = colors.labelTertiary,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Composer(
                 draft = draft,
                 onDraftChange = { draft = it },
@@ -414,7 +430,7 @@ fun ChatScreen(
                 contextBreakdown = contextBreakdown,
                 contextPressure = contextPressure,
                 running = conversation?.running == true,
-                enabled = currentSessionId != null,
+                enabled = currentSessionId != null && !syncing,
                 onOpenSheet = { sheet = ChatSheet.Commands },
                 onSend = ::send,
                 onStop = { scope.launch { store.cancelTurn() } },

@@ -13,6 +13,7 @@
     <string name="common_loading">Загрузка…</string>
     <string name="common_connected">Подключено</string>
     <string name="common_reconnecting">Переподключение…</string>
+    <string name="chat_syncing_state">Синхронизация состояния сеанса…</string>
     <string name="common_offline">Офлайн</string>
     <string name="common_error">Что-то пошло не так</string>
     <string name="common_close">Закрыть</string>
