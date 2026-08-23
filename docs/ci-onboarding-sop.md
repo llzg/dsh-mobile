@@ -75,3 +75,9 @@ MANUAL BRING-UP → STABLE → IDEMPOTENCY VERIFIED → FLOOD GUARD VERIFIED →
   （audit-workflow-events.sh）FAIL → CI_AUTOMATION_READY=NO。
 - 禁止"一个 manual/cron event 顺手把全部 workflow 跑起来"——每个 workflow 必须
   显式声明允许事件集。
+- **触发模型（2026-08-23 起）**：PRIMARY_TRIGGER=EVENT（systemd mirror-sync.sh：Gitea
+  mirror sync 成功后立即调用 ci-trigger.sh）；FALLBACK_TRIGGER=POLLING（Woodpecker cron
+  mirror-sync，flock+state+API 三重幂等，正常输出 NO_NEW_COMMIT）。注意：Gitea
+  pull-mirror 更新不产生 webhook（实测），故不用 webhook relay，sync 后直接 invoke。
+- 新增项目接入时保持同一 trigger-core（scripts/ci/ci-trigger.sh），JSON 解析用 tr
+  （busybox 兼容），禁用手写 sed 换行。
