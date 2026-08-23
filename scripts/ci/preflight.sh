@@ -13,6 +13,7 @@ if [ -z "$URL" ]; then URL="http://192.168.5.16:8010"; fi
 TOK="$WOODPECKER_TOKEN"
 if [ -z "$TOK" ]; then echo "CI_AUTOMATION_READY=NO reason=no-token"; exit 1; fi
 GUARD_DIR="/root/nas_docker/dsh-mobile/scripts/ci"
+REPO_ROOT=$(CDPATH= cd -- "$GUARD_DIR/../.." && pwd)
 ARTIFACT_DIR="${DSH_MOBILE_RELEASES:-/volume1/docker/dsh-mobile/releases}"
 FAIL=0
 check() {
@@ -83,5 +84,18 @@ check "disk-usage<95" "$([ "${DF:-0}" -lt 95 ] 2>/dev/null && echo OK || echo us
 
 # 10. artifact path
 check "artifact-path" "$([ -d "$ARTIFACT_DIR" ] && echo OK || echo missing:$ARTIFACT_DIR)"
+
+# 11. workflow event policy audit (static .woodpecker/*.yml gate)
+# CRON IS INFRASTRUCTURE-ONLY: verify/release/bench must not inherit cron;
+# release must be deployment-gated. Failure -> CI_AUTOMATION_READY=NO.
+POL="NO"
+if [ -x "$GUARD_DIR/audit-workflow-events.sh" ]; then
+  AUDIT_DIR="${AUDIT_DIR:-$REPO_ROOT/.woodpecker}"
+  POL_OUT=$(sh "$GUARD_DIR/audit-workflow-events.sh" --dir "$AUDIT_DIR" --repo "$REPO" 2>/dev/null | grep WORKFLOW_EVENT_POLICY_PASS | cut -d= -f2 || true)
+  [ "$POL_OUT" = "YES" ] && POL="OK"
+  check "workflow-event-policy" "$POL"
+else
+  check "workflow-event-policy" "missing:$GUARD_DIR/audit-workflow-events.sh"
+fi
 
 if [ "$FAIL" = "0" ]; then echo "CI_AUTOMATION_READY=YES"; else echo "CI_AUTOMATION_READY=NO"; exit 1; fi

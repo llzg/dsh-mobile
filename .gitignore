@@ -23,3 +23,7 @@ artifacts/
 *.apk
 build-info.json
 deploy-status.json
+
+# python caches
+__pycache__/
+*.pyc
