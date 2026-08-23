@@ -24,3 +24,8 @@
 - release 人工门禁：3.17.0 无 workflow-level approval → FALLBACK_GATE=deployment-event
   （NATIVE_APPROVAL_UNAVAILABLE）；非 prod deploy 产物标记 -test + draft。
 - 本 commit 后执行事件门禁验证回归（见流水线：verify 唯一、cron 不触发 release/bench）。
+
+## Event-driven trigger（2026-08-23 PoC）
+
+- 目标：Gitea mirror 更新 → webhook → relay → Woodpecker API（EVENT primary，
+  POLLING fallback）。本 commit 用于验证 mirror 更新是否产生 webhook push 事件。
