@@ -29,3 +29,4 @@
 
 - 目标：Gitea mirror 更新 → webhook → relay → Woodpecker API（EVENT primary，
   POLLING fallback）。本 commit 用于验证 mirror 更新是否产生 webhook push 事件。
+- event-trigger 验证 2（hook 存在时 mirror 更新）
