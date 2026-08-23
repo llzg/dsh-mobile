@@ -26,7 +26,17 @@ cd "$REL"
 sha256sum dsh-mobile-*.apk latest.apk 2>/dev/null > SHA256SUMS.txt || true
 
 # deploy status (real CD data — Running Revision = this release)
-RELEASE_NAME="v${VER}-build${CI_BUILD_NUMBER:-0}-${TAG}"
+# Test deployments (deploy_to != prod) are marked -test + draft to avoid polluting
+# the official release sequence.
+DEPLOY_TARGET="${CI_DEPLOY_TARGET:-}"
+if [ -n "$DEPLOY_TARGET" ] && [ "$DEPLOY_TARGET" != "prod" ]; then
+  TEST_MARK="-test-${DEPLOY_TARGET}"
+  DRAFT=true
+else
+  TEST_MARK=""
+  DRAFT=false
+fi
+RELEASE_NAME="v${VER}-build${CI_BUILD_NUMBER:-0}-${TAG}${TEST_MARK}"
 DL="$GITEA_URL/llzg/dsh-mobile/releases/download/$RELEASE_NAME/dsh-mobile-${VER}+${TAG}.apk"
 printf '{"runningRevision":"%s","shortRevision":"%s","version":"%s","buildNumber":"%s","deployedAt":"%s","health":"%s","downloadUrl":"%s","artifactStore":"/volume1/docker/dsh-mobile/releases"}\n' \
   "$REV" "$TAG" "$VER" "${CI_BUILD_NUMBER:-0}" "$(date -u +%FT%TZ)" "pending" "$DL" > deploy-status.json
@@ -36,7 +46,7 @@ cat deploy-status.json
 # Gitea release asset (downloadable NAS URL)
 if [ -n "$GITEA_TOKEN" ] && [ -f "$REL/dsh-mobile-${VER}+${TAG}.apk" ]; then
   curl -sf -H "Authorization: token $GITEA_TOKEN" -X POST "$GITEA_URL/api/v1/repos/llzg/dsh-mobile/releases" \
-    -H 'content-type: application/json' -d "{\"tag_name\":\"$RELEASE_NAME\",\"name\":\"$RELEASE_NAME\",\"draft\":false}" >/tmp/release.json || echo "[cd] gitea release create failed"
+    -H 'content-type: application/json' -d "{\"tag_name\":\"$RELEASE_NAME\",\"name\":\"$RELEASE_NAME\",\"draft\":$DRAFT}" >/tmp/release.json || echo "[cd] gitea release create failed"
   RID=$(jq -r '.id // empty' /tmp/release.json 2>/dev/null || echo "")
   if [ -n "$RID" ]; then
     curl -sf -H "Authorization: token $GITEA_TOKEN" -X POST "$GITEA_URL/api/v1/repos/llzg/dsh-mobile/releases/$RID/assets?name=dsh-mobile-${VER}%2B${TAG}.apk" -H 'content-type: application/vnd.android.package-archive' --data-binary @"$REL/dsh-mobile-${VER}+${TAG}.apk" || echo "[cd] asset upload failed"

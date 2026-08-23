@@ -1,8 +1,13 @@
-# dsh-mobile release/CD pipeline — manual event (approval gate)
+# dsh-mobile release/CD pipeline — event: deployment ONLY (explicit human deploy = approval gate)
+# Woodpecker 3.17.0 has NO workflow-level approval. The native explicit gate is the
+# DEPLOYMENT event: a human deploys a specific verified pipeline (UI "deploy" action or
+# POST /api/repos/{id}/pipelines/{n}?event=deployment&deploy_to=<env>).
+# manual / cron / push / pull_request NEVER run release (NATIVE_APPROVAL_UNAVAILABLE,
+# FALLBACK_GATE=deployment-event).
 # Produces: signed release APK (if keystore secrets) + latest.apk + deploy-status.json
 # + Gitea release asset (if GITEA_TOKEN secret present). Healthcheck via download URL.
 when:
-  event: [manual]
+  event: [deployment]
   branch: main
 
 clone:
