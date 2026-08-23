@@ -14,3 +14,13 @@
 - `verify.yml` 触发集 = push / pull_request / manual（cron 仅跑 mirror-sync，
   防止队列淹没）。release/bench 仅在 manual 事件运行（自动触发时会运行，
   产物为未签名 APK，签名密钥不在 CI 内）。
+
+## Event Governance（2026-08-23 追加）
+
+- CRON IS INFRASTRUCTURE-ONLY：cron → mirror/sync/maintenance only；
+  verify = push/pull_request/manual；release = deployment（显式人工门禁）；bench = manual。
+- 静态审计：`scripts/ci/audit-workflow-events.sh`（WORKFLOW_EVENT_POLICY_PASS），
+  接入 preflight（FAIL→CI_AUTOMATION_READY=NO）与 verify 早期 workflow-policy 步骤。
+- release 人工门禁：3.17.0 无 workflow-level approval → FALLBACK_GATE=deployment-event
+  （NATIVE_APPROVAL_UNAVAILABLE）；非 prod deploy 产物标记 -test + draft。
+- 本 commit 后执行事件门禁验证回归（见流水线：verify 唯一、cron 不触发 release/bench）。
