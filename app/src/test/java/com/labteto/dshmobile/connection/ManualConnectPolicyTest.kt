@@ -84,7 +84,7 @@ class ManualConnectPolicyTest {
 
     /** A reachable probe, as the manual path would receive it from host.describe. */
     private fun reachableOutcome(): ProbeOutcome =
-        ProbeOutcome.Reachable(HostDescription(version = '0.8.2', cwd = '/', attachedSessions = 0, canOpenPath = false))
+        ProbeOutcome.Reachable(HostDescription(version = "0.8.2", cwd = "/", attachedSessions = 0, canOpenPath = false))
 
     /** What the manual path reports when the probe fails — its real cause, via the shared mapping. */
     private fun failureFor(outcome: ProbeOutcome): ConnectFailure = ConnectFailure.from(outcome)
