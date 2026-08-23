@@ -1,8 +1,8 @@
 # dsh-mobile verify pipeline — local Woodpecker CI (DXP6800 agent)
-# Trigger: push / cron (existing GitHub→Gitea mirror→cron mechanism, clone from Gitea LAN mirror)
+# Trigger: push / pull_request / manual (via ci-trigger.sh) — cron runs mirror-sync ONLY (flood governance)
 # Artifact store: /volume1/docker/dsh-mobile/releases (NAS), build-info-<sha7>.json (real CI data)
 when:
-  event: [push, pull_request, cron, manual]
+  event: [push, pull_request, manual]
 
 clone:
   git:
