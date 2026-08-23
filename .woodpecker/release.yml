@@ -19,6 +19,12 @@ clone:
         from_secret: GITEA_CLONE_URL
 
 steps:
+  deploy-context:
+    image: alpine:3.20
+    commands:
+      - echo "deployment pipeline repo=$CI_REPO sha=$CI_COMMIT_SHA branch=$CI_COMMIT_BRANCH"
+      - echo "deploy_target=${CI_PIPELINE_DEPLOY_TARGET:-none} event=$CI_BUILD_EVENT"
+
   release-check:
     image: alpine:3.20
     commands:

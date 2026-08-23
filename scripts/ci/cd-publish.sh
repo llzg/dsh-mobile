@@ -28,7 +28,7 @@ sha256sum dsh-mobile-*.apk latest.apk 2>/dev/null > SHA256SUMS.txt || true
 # deploy status (real CD data — Running Revision = this release)
 # Test deployments (deploy_to != prod) are marked -test + draft to avoid polluting
 # the official release sequence.
-DEPLOY_TARGET="${CI_DEPLOY_TARGET:-}"
+DEPLOY_TARGET="${CI_PIPELINE_DEPLOY_TARGET:-}"   # deployment event env (woodpecker 3.17)
 if [ -n "$DEPLOY_TARGET" ] && [ "$DEPLOY_TARGET" != "prod" ]; then
   TEST_MARK="-test-${DEPLOY_TARGET}"
   DRAFT=true
