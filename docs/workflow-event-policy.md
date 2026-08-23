@@ -40,6 +40,7 @@
 
 - release.yml：`event: [manual]` → `event: [deployment]`（repo allow_deploy=true）。
 - verify.yml：新增早期 `workflow-policy` 步骤。
-- mirror-sync.sh：移除 dead target `llzg/invoice-agent-ui`（Gitea 404；GitHub 源存在但
-  从未建 Gitea mirror；invoice CI 直接走 GitHub forge）。机制（timer+script+env token）不变。
+- mirror-sync.sh：2026-08-23 曾误判 `llzg/invoice-agent-ui` 为 dead（root token 对
+  私有 mirror 返回 404 是权限假象）。已修正：Gitea mirror 存在且为私有（admin token
+  可见），目标已恢复；audit-mirror-targets.sh 改用 admin token 判定存在性。机制不变。
 - 新增 `scripts/ops/audit-mirror-targets.sh`（MIRROR_TARGET_AUDIT=PASS/FAIL）。
