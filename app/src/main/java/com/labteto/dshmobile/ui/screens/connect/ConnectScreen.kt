@@ -255,6 +255,28 @@ fun ConnectScreen(
             // Progress and failure are shared: an attempt reports the same way whichever mode
             // started it, and duplicating the block per mode is how the two drift apart.
             if (state.connecting) ConnectProgressRow(state.stage, state.attempted)
+            // Off-subnet manual target: advisory only. The connect continues — a VPN or router may
+            // still reach it — and if the probe fails, its real cause replaces this warning.
+            state.subnetWarning?.let { label ->
+                val target = state.attempted.orEmpty()
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = colors.warnTertiary,
+                ) {
+                    Text(
+                        stringResource(
+                            if (label.isBlank()) R.string.connect_warn_subnet
+                            else R.string.connect_warn_subnet_with_label,
+                            target,
+                            label,
+                        ),
+                        style = DsType.small13,
+                        color = colors.warnLabel,
+                        modifier = Modifier.padding(DsSpacing.medium),
+                    )
+                }
+            }
             state.failure?.let { failure ->
                 ConnectFailureBlock(
                     failure = failure,
@@ -671,11 +693,6 @@ private fun ConnectFailureBlock(
     }
     val body = when (failure) {
         ConnectFailure.InvalidInput -> stringResource(R.string.connect_fail_invalid)
-        is ConnectFailure.DifferentSubnet -> stringResource(
-            R.string.connect_fail_subnet,
-            authority,
-            failure.localPrefix ?: stringResource(R.string.connect_unreachable),
-        )
         ConnectFailure.Timeout -> stringResource(R.string.connect_fail_timeout, authority, port)
         ConnectFailure.Refused -> stringResource(R.string.connect_fail_refused, authority)
         ConnectFailure.TrustFence -> stringResource(R.string.connect_failed_fence)

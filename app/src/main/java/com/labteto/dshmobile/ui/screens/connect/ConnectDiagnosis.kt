@@ -17,9 +17,6 @@ sealed interface ConnectFailure {
     /** The address or port was not usable as typed. */
     data object InvalidInput : ConnectFailure
 
-    /** The address is not on this phone's own /24, so nothing here can reach it. */
-    data class DifferentSubnet(val localPrefix: String?) : ConnectFailure
-
     /** Nothing answered — dropped packets. Firewall, or a router isolating wireless clients. */
     data object Timeout : ConnectFailure
 
@@ -83,8 +80,9 @@ sealed interface ConnectFailure {
             ProbeOutcome.Refused -> Refused
             ProbeOutcome.Timeout -> Timeout
             ProbeOutcome.DnsFailure -> DnsFailure
-            // No route is a different-network problem; the subnet pre-check catches most of these
-            // first, and when it does not, "nothing answered" is the honest reading.
+            // No route means nothing answered. A manual connect is never refused for being on
+            // another subnet — the probe is the only judge of reachability — so when no route
+            // exists, "nothing answered" is the honest reading, not a subnet mismatch.
             ProbeOutcome.Unreachable -> Timeout
             ProbeOutcome.NotAHarness -> NotAHarness
             ProbeOutcome.TlsFailure -> TlsFailure

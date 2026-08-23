@@ -36,9 +36,9 @@ import javax.inject.Singleton
 /**
  * Whether [target] sits in the same /24 as any of [localIps].
  *
- * Free function so it is testable without a device: the sweep only ever looks at the phone's own
- * /24, so an address outside it can be rejected instantly with a message that also explains why
- * scanning found nothing. A non-literal host (a name) is not judged here — it cannot be.
+ * Free function so it is testable without a device. The LAN sweep only ever walks the phone's own
+ * /24 (see [scan]), and [ManualConnectPolicy] uses this to warn — never to refuse — when a manual
+ * target is on another range. A non-literal host (a name) is not judged here — it cannot be.
  */
 internal fun sameSubnet(target: String, localIps: List<String>): Boolean {
     val targetParts = target.split('.')
@@ -48,6 +48,19 @@ internal fun sameSubnet(target: String, localIps: List<String>): Boolean {
     if (localIps.isEmpty()) return true
     val targetPrefix = targetParts.take(3)
     return localIps.any { it.split('.').take(3) == targetPrefix }
+}
+
+/**
+ * /24 candidates for a device IPv4, e.g. 192.168.1.1..254 (host itself excluded).
+ *
+ * Top-level and free of Android imports so the auto-scan's scope — it only ever walks the phone's
+ * own /24s — is unit-testable on the JVM.
+ */
+internal fun subnetCandidates(ip: String): List<String> {
+    val parts = ip.split('.')
+    if (parts.size != 4) return emptyList()
+    val prefix = parts.take(3).joinToString(".")
+    return (1..254).map { "$prefix.$it" }.filter { it != ip }
 }
 
 /**
@@ -82,14 +95,6 @@ class DiscoveryEngine @Inject constructor(
         }
         result.filter { it.isNotBlank() }
     }.getOrDefault(emptyList())
-
-    /** /24 candidates for a device IPv4, e.g. 192.168.1.1..254 (host itself excluded). */
-    fun subnetCandidates(ip: String): List<String> {
-        val parts = ip.split('.')
-        if (parts.size != 4) return emptyList()
-        val prefix = parts.take(3).joinToString(".")
-        return (1..254).map { "$prefix.$it" }.filter { it != ip }
-    }
 
     /**
      * Probe one authority; null when it is not a harness.
@@ -252,15 +257,10 @@ class DiscoveryEngine @Inject constructor(
     }
 
     /**
-     * True when [host] is an IPv4 literal in one of this device's own /24s.
+     * This device's own /24 as a label, e.g. 192.168.1.x; null when it has no IPv4.
      *
-     * Suspending because enumerating interfaces is a syscall walk, and this runs on the tap that
-     * starts a connection — not somewhere a stall is acceptable.
+     * Used for the manual-connect warning, which is advisory only — see [ManualConnectPolicy].
      */
-    suspend fun isOnLocalSubnet(host: String): Boolean =
-        withContext(Dispatchers.IO) { sameSubnet(host, localIpv4s()) }
-
-    /** This device's own /24 as a label, e.g. `192.168.1.x`; null when it has no IPv4. */
     suspend fun localSubnetLabel(): String? = withContext(Dispatchers.IO) {
         localIpv4s().firstOrNull()
             ?.split('.')

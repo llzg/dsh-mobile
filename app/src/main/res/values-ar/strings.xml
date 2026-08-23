@@ -52,7 +52,6 @@
     <string name="connect_stage_connected">متصل</string>
     <string name="connect_cancel">إلغاء</string>
     <string name="connect_fail_invalid">أدخل عنوان IP للكمبيوتر ومنفذًا بين 1 و 65535.</string>
-    <string name="connect_fail_subnet">%1$s ليس على شبكة هذا الهاتف. الهاتف على %2$s — صِل الجهازين بنفس شبكة الراوتر. عادةً تكون شبكة الضيوف منفصلة، ومسح الشبكة يبحث في %2$s فقط.</string>
     <string name="connect_fail_timeout">لم يردّ أي شيء على %1$s. غالبًا يحجب جدار الحماية في الكمبيوتر الاتصالات الواردة على المنفذ %2$d — اسمح به ثم أعد المحاولة. بعض الراوترات تمنع أجهزة Wi-Fi من الوصول إلى الأجهزة السلكية.</string>
     <string name="connect_fail_refused">رفض %1$s الاتصال. لا يستمع الـ harness إلا على الكمبيوتر نفسه ما لم يُفعّل وضع الشبكة المحلية — فعّله وأعد تشغيله. وإن غيّرت المنفذ، تحقق من تطابقه.</string>
     <string name="connect_fail_fence_title">رفض الـ harness هذا العنوان</string>

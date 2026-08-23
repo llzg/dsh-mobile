@@ -52,7 +52,6 @@
     <string name="connect_stage_connected">Connecté</string>
     <string name="connect_cancel">Annuler</string>
     <string name="connect_fail_invalid">Saisissez l\'adresse IP de l\'ordinateur et un port entre 1 et 65535.</string>
-    <string name="connect_fail_subnet">%1$s n\'est pas sur le réseau de ce téléphone. Le téléphone est sur %2$s — connectez les deux appareils au même réseau du routeur. Un Wi-Fi invité est généralement séparé, et Analyser le réseau ne parcourt que %2$s.</string>
     <string name="connect_fail_timeout">Aucune réponse à %1$s. Le pare-feu de l\'ordinateur bloque généralement les connexions entrantes sur le port %2$d — autorisez-les puis réessayez. Certains routeurs empêchent aussi les appareils Wi-Fi d\'atteindre ceux en filaire.</string>
     <string name="connect_fail_refused">%1$s a refusé la connexion. Le harness n\'écoute que sur l\'ordinateur lui-même tant que le mode LAN n\'est pas activé — activez-le et redémarrez le harness. Si vous avez changé le port, vérifiez qu\'il correspond.</string>
     <string name="connect_fail_fence_title">Le harness a refusé cette adresse</string>

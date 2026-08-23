@@ -61,7 +61,8 @@
     <string name="connect_stage_connected">Connected</string>
     <string name="connect_cancel">Cancel</string>
     <string name="connect_fail_invalid">Enter the computer\'s IP address and a port between 1 and 65535.</string>
-    <string name="connect_fail_subnet">%1$s is not on this phone\'s network. This phone is on %2$s — connect both devices to the same router network. A guest or IoT Wi-Fi is usually kept separate, and Scan network only searches %2$s.</string>
+    <string name="connect_warn_subnet">%1$s is not on this phone\'s current Wi-Fi subnet, but the network may still reach it through a VPN or router — continuing to connect.</string>
+    <string name="connect_warn_subnet_with_label">%1$s is not on this phone\'s current Wi-Fi subnet (%2$s), but the network may still reach it through a VPN or router — continuing to connect.</string>
     <string name="connect_fail_timeout">Nothing answered at %1$s. Usually the computer\'s firewall is blocking incoming connections on port %2$d — allow it and try again. Some routers also stop Wi-Fi devices from reaching wired ones.</string>
     <string name="connect_fail_refused">%1$s refused the connection. The harness only listens on the computer itself unless LAN mode is enabled — enable it and restart the harness. If you changed the port, check it matches.</string>
     <string name="connect_fail_fence_title">The harness rejected this address</string>
@@ -378,9 +379,9 @@
     <string name="settings_update_check_hint">Asks GitHub for the latest release when the app starts.</string>
     <!-- Relay: choosing how to connect, pairing, and the failures that need a different fix. -->
     <string name="connect_mode_title">How to connect</string>
-    <string name="connect_mode_lan">Local network</string>
+    <string name="connect_mode_lan">Private network</string>
     <string name="connect_mode_relay">Relay</string>
-    <string name="connect_mode_lan_hint">Talk straight to a harness on your Wi-Fi. Nothing checks who you are, so use this only on a network you trust.</string>
+    <string name="connect_mode_lan_hint">Talk straight to a harness on your Wi-Fi, or across a VPN or router to another private network. Nothing checks who you are, so use this only on a network you trust.</string>
     <string name="connect_mode_relay_hint">Talk to a harness through dsh-relay. This device holds a token it is issued once, the connection is encrypted, and it works from outside your Wi-Fi.</string>
     <string name="connect_relay_banner">A relay checks that it is you, and nothing else. Once paired, this device can run commands on that computer, exactly as a terminal on it could.</string>
     <string name="connect_relay_remembered">Paired relays</string>

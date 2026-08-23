@@ -52,7 +52,6 @@
     <string name="connect_stage_connected">Conectado</string>
     <string name="connect_cancel">Cancelar</string>
     <string name="connect_fail_invalid">Informe o endereço IP do computador e uma porta entre 1 e 65535.</string>
-    <string name="connect_fail_subnet">%1$s não está na rede deste telefone. O telefone está em %2$s — conecte os dois dispositivos à mesma rede do roteador. Um Wi-Fi de convidados costuma ficar separado, e Buscar na rede só procura em %2$s.</string>
     <string name="connect_fail_timeout">Nada respondeu em %1$s. Normalmente o firewall do computador bloqueia conexões de entrada na porta %2$d — permita e tente novamente. Alguns roteadores também impedem que dispositivos Wi-Fi alcancem os cabeados.</string>
     <string name="connect_fail_refused">%1$s recusou a conexão. O harness só escuta no próprio computador enquanto o modo LAN não estiver ativado — ative-o e reinicie o harness. Se você mudou a porta, confira se ela confere.</string>
     <string name="connect_fail_fence_title">O harness recusou este endereço</string>

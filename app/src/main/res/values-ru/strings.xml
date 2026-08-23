@@ -52,7 +52,6 @@
     <string name="connect_stage_connected">Подключено</string>
     <string name="connect_cancel">Отмена</string>
     <string name="connect_fail_invalid">Введите IP-адрес компьютера и порт от 1 до 65535.</string>
-    <string name="connect_fail_subnet">%1$s не в сети этого телефона. Телефон находится в %2$s — подключите оба устройства к одной сети роутера. Гостевая Wi-Fi обычно отделена, а поиск в сети проверяет только %2$s.</string>
     <string name="connect_fail_timeout">На %1$s ничего не ответило. Обычно брандмауэр компьютера блокирует входящие подключения на порт %2$d — разрешите их и повторите. Некоторые роутеры также не дают Wi-Fi-устройствам доступ к проводным.</string>
     <string name="connect_fail_refused">%1$s отклонил подключение. Без режима LAN harness слушает только на самом компьютере — включите его и перезапустите harness. Если вы меняли порт, проверьте его.</string>
     <string name="connect_fail_fence_title">harness отклонил этот адрес</string>

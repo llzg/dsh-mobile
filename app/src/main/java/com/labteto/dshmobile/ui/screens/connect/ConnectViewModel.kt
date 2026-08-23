@@ -10,6 +10,7 @@ import com.labteto.dshmobile.connection.DiscoveredHost
 import com.labteto.dshmobile.connection.DiscoveryEngine
 import com.labteto.dshmobile.connection.HostConfig
 import com.labteto.dshmobile.connection.HostsStore
+import com.labteto.dshmobile.connection.ManualConnectPolicy
 import com.labteto.dshmobile.connection.MdnsDiscovery
 import com.labteto.dshmobile.connection.ProbeOutcome
 import com.labteto.dshmobile.connection.ProbeTimeouts
@@ -67,6 +68,12 @@ data class ConnectUiState(
     val stage: ConnectStage = ConnectStage.Idle,
     /** Why the last attempt failed, or null. */
     val failure: ConnectFailure? = null,
+    /**
+     * Subnet advisory for the manual connect in flight: set when the target is off this phone's
+     * own Wi-Fi /24 but the attempt is continuing anyway (VPN/路由 may still reach it). A warning
+     * only — never a gate; a real probe failure replaces it with its own cause.
+     */
+    val subnetWarning: String? = null,
     /** The authority actually attempted, e.g. `192.168.1.20:3080` — never the live field text. */
     val attempted: String? = null,
     /** The loop is still retrying in the background, so a cancel is worth offering. */
@@ -403,21 +410,21 @@ class ConnectViewModel @Inject constructor(
         val isLoopback = input.host == LOOPBACK || input.host == "localhost"
 
         localStage = ConnectStage.Validating
-        _state.update { it.copy(stage = ConnectStage.Validating, failure = null, attempted = authority) }
+        _state.update { it.copy(stage = ConnectStage.Validating, failure = null, subnetWarning = null, attempted = authority) }
 
         viewModelScope.launch {
             val paired = hostsStore.hosts.first().firstOrNull { it.authority == authority && it.isRelay }
-            // Cheap and decisive: the sweep only ever looks at this phone's own /24, so an address
-            // outside it can never be reached from here and can never be found by scanning either.
-            // Saying so now beats a four-second timeout that blames the firewall.
-            //
-            // A paired relay is the exception, and the only one. It holds a real credential rather
-            // than relying on being on the same wire, and reaching one through a forwarded port or a
-            // VPN is the reason the relay exists — so for those the guard would be refusing the
-            // supported case with a confident, wrong explanation.
-            if (!isLoopback && paired == null && !discoveryEngine.isOnLocalSubnet(input.host)) {
-                fail(ConnectFailure.DifferentSubnet(discoveryEngine.localSubnetLabel()), authority)
-                return@launch
+            // Subnet is advisory on the manual path, never a gate. The target may sit on another
+            // private range the phone reaches through a VPN (WireGuard / Tailscale / 节点小宝 /
+            // ZeroTier), a routed interface, or a static route — the probe is the only judge of
+            // reachability. Warn while we try; a real probe failure (timeout / refused / DNS /
+            // not-a-harness / …) is reported as its own cause, never as a subnet mismatch.
+            val localIps = withContext(Dispatchers.IO) { discoveryEngine.localIpv4s() }
+            if (!isLoopback && paired == null &&
+                ManualConnectPolicy.offSubnetWarning(input.host, localIps)
+            ) {
+                val label = withContext(Dispatchers.IO) { discoveryEngine.localSubnetLabel() }
+                _state.update { it.copy(subnetWarning = label) }
             }
             localStage = ConnectStage.Reaching
             _state.update { it.copy(stage = ConnectStage.Reaching) }
@@ -456,7 +463,7 @@ class ConnectViewModel @Inject constructor(
         // means the screen is never briefly re-driven by a trailing emission.
         localStage = ConnectStage.Idle
         connectionManager.disconnect()
-        _state.update { it.copy(stage = ConnectStage.Idle, failure = null, retrying = false) }
+        _state.update { it.copy(stage = ConnectStage.Idle, failure = null, subnetWarning = null, retrying = false) }
     }
 
     /**
@@ -471,6 +478,7 @@ class ConnectViewModel @Inject constructor(
             it.copy(
                 stage = ConnectStage.Idle,
                 failure = failure,
+                subnetWarning = null,
                 attempted = attempted ?: it.attempted,
                 retrying = false,
                 recentStatus = attempted?.let { key -> it.recentStatus + (key to HostProbe.Unreachable) }
@@ -492,6 +500,7 @@ class ConnectViewModel @Inject constructor(
             it.copy(
                 stage = ConnectStage.OpeningStreams,
                 failure = null,
+                subnetWarning = null,
                 attempted = host.authority,
                 retrying = false,
             )

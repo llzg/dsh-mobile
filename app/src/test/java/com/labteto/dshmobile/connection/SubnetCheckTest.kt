@@ -5,9 +5,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The LAN sweep only ever walks the phone's own /24, so an address outside it can neither be
- * scanned for nor routed to. Catching that before probing turns a four-second timeout that blames
- * the firewall into an instant, correct explanation.
+ * The shared subnet primitive ([sameSubnet]) that both paths build on.
+ *
+ * The LAN auto-scan only ever walks the phone's own /24, so scanning never leaves it. A manual
+ * connect treats "another subnet" as a warning at most — a VPN or router may still reach the
+ * target — and the probe decides, so these cases cover the primitive both paths rely on.
  */
 class SubnetCheckTest {
 

@@ -52,7 +52,6 @@
     <string name="connect_stage_connected">منسلک</string>
     <string name="connect_cancel">منسوخ کریں</string>
     <string name="connect_fail_invalid">کمپیوٹر کا IP پتہ اور 1 سے 65535 کے درمیان پورٹ درج کریں۔</string>
-    <string name="connect_fail_subnet">%1$s اس فون کے نیٹ ورک پر نہیں ہے۔ یہ فون %2$s پر ہے — دونوں آلات کو ایک ہی راوٹر نیٹ ورک سے جوڑیں۔ مہمان وائی فائی عام طور پر الگ رکھی جاتی ہے، اور نیٹ ورک اسکین صرف %2$s دیکھتا ہے۔</string>
     <string name="connect_fail_timeout">%1$s سے کوئی جواب نہیں آیا۔ عام طور پر کمپیوٹر کا فائیر وال پورٹ %2$d پر آنے والے کنکشن روکتا ہے — اسے اجازت دیکر دوبارہ کوشش کریں۔ کچھ راوٹر وائی فائی آلات کو تار والے آلات تک پہنچنے سے بھی روکتے ہیں۔</string>
     <string name="connect_fail_refused">%1$s نے کنکشن مسترد کر دیا۔ LAN موڈ فعال کیے بغیر harness صرف کمپیوٹر پر ہی سنتا ہے — اسے فعال کرکے harness دوبارہ چلائیں۔ اگر پورٹ بدلا ہے تو اسے بھی جانچیں۔</string>
     <string name="connect_fail_fence_title">harness نے یہ پتہ مسترد کر دیا</string>

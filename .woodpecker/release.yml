@@ -65,7 +65,7 @@ steps:
         from_secret: DSH_KEY_ALIAS
       DSH_KEY_PASSWORD:
         from_secret: DSH_KEY_PASSWORD
-      DSH_VERSION_NAME: "0.8.1"
+      DSH_VERSION_NAME: "0.8.2"
     volumes:
       - /volume1/docker/dsh-mobile/ci-cache/android-sdk:/opt/android-sdk
       - /volume1/docker/dsh-mobile/ci-cache/gradle:/root/.gradle
@@ -118,7 +118,7 @@ steps:
       GITEA_TOKEN:
         from_secret: GITEA_TOKEN
       GITEA_URL: http://192.168.5.35:3000
-      DSH_VERSION_NAME: "0.8.1"
+      DSH_VERSION_NAME: "0.8.2"
     volumes:
       - /volume1:/volume1
     commands:

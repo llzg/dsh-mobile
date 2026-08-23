@@ -52,7 +52,8 @@
     <string name="connect_stage_connected">已连接</string>
     <string name="connect_cancel">取消</string>
     <string name="connect_fail_invalid">请输入电脑的 IP 地址，以及 1 到 65535 之间的端口。</string>
-    <string name="connect_fail_subnet">%1$s 不在本机所在的网络上。本机在 %2$s — 请将两台设备连到同一路由器网络。访客 Wi-Fi 通常是隔离的，而扫描网络只会搜索 %2$s。</string>
+    <string name="connect_warn_subnet">%1$s 不在当前 Wi-Fi 子网内，但系统可能通过 VPN / 路由访问，将继续尝试连接。</string>
+    <string name="connect_warn_subnet_with_label">%1$s 不在当前 Wi-Fi 子网（%2$s）内，但系统可能通过 VPN / 路由访问，将继续尝试连接。</string>
     <string name="connect_fail_timeout">%1$s 没有任何响应。通常是电脑的防火墙拦截了端口 %2$d 的入站连接 — 允许后重试。部分路由器也会阻止 Wi-Fi 设备访问有线设备。</string>
     <string name="connect_fail_refused">%1$s 拒绝了连接。未启用 LAN 模式时，harness 只在电脑本机监听 — 请启用并重启 harness。如果改过端口，请确认是否一致。</string>
     <string name="connect_fail_fence_title">harness 拒绝了该地址</string>
@@ -376,9 +377,9 @@
     <string name="settings_update_check">检查更新</string>
     <string name="settings_update_check_hint">应用启动时向 GitHub 查询最新发行版。</string>
     <string name="connect_mode_title">连接方式</string>
-    <string name="connect_mode_lan">局域网</string>
+    <string name="connect_mode_lan">私网连接</string>
     <string name="connect_mode_relay">中继</string>
-    <string name="connect_mode_lan_hint">直接连接同一 Wi-Fi 下的 harness。没有任何身份验证，请只在可信网络中使用。</string>
+    <string name="connect_mode_lan_hint">直接连接一台 harness，可位于同一 Wi-Fi、其他网段或 VPN / 路由可达的私网。无身份验证，请只在可信网络中使用。</string>
     <string name="connect_mode_relay_hint">通过 dsh-relay 连接 harness。本设备保存一次性签发的令牌，连接经过加密，在 Wi-Fi 之外也能使用。</string>
     <string name="connect_relay_banner">中继只验证连接的人是不是你。配对之后，本设备可以在那台电脑上执行命令，与在它上面打开终端完全一样。</string>
     <string name="connect_relay_remembered">已配对的中继</string>
